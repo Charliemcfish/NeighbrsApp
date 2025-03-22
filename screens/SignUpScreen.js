@@ -9,13 +9,19 @@ import {
   Image, 
   TextInput,
   Alert,
-  Switch
+  Switch,
+  KeyboardAvoidingView,
+
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 
 // Make sure to install this:
 // expo install expo-image-picker
@@ -32,26 +38,36 @@ const SignUpScreen = ({ navigation }) => {
   const [wantToBeHelper, setWantToBeHelper] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
-    // Request permissions
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'We need camera roll permissions to upload a profile picture');
-      return;
-    }
+ // screens/SignUpScreen.js
+// Update the pickImage function
 
+// screens/SignUpScreen.js
+// Update the pickImage function
+
+const pickImage = async () => {
+  // Request permissions
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  
+  if (status !== 'granted') {
+    Alert.alert('Permission Needed', 'We need camera roll permissions to upload a profile picture');
+    return;
+  }
+
+  try {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images', // Changed to 'images' (plural)
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
     });
 
-    if (!result.cancelled) {
-      setProfileImage(result.uri);
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri);
     }
-  };
+  } catch (error) {
+    console.log('ImagePicker Error: ', error);
+  }
+};
 
   // In your SignUpScreen.js file
 const handleSignUp = async () => {
@@ -110,6 +126,7 @@ const handleSignUp = async () => {
 };
 
   return (
+    <KeyboardAvoidingWrapper>
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Create an Account</Text>
@@ -224,6 +241,7 @@ const handleSignUp = async () => {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </KeyboardAvoidingWrapper>
   );
 };
 

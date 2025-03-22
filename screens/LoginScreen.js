@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -37,6 +38,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
+    <KeyboardAvoidingWrapper>
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Image
@@ -95,6 +97,7 @@ const LoginScreen = ({ navigation }) => {
         </View>
       </View>
     </SafeAreaView>
+    </KeyboardAvoidingWrapper>
   );
 };
 

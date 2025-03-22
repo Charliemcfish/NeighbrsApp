@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
+
 
 // Update your navigation.js to include this screen
 
@@ -89,6 +91,8 @@ const HelperSetupScreen = ({ route, navigation }) => {
   };
 
   return (
+    <KeyboardAvoidingWrapper>
+
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Set Up Your Helper Profile</Text>
@@ -172,6 +176,8 @@ const HelperSetupScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
+    </KeyboardAvoidingWrapper>
+
   );
 };
 

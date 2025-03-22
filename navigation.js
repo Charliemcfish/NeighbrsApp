@@ -1,27 +1,64 @@
-import React from 'react';
+// navigation.js
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 
-// Import your screens (we'll create these next)
+// Import your screens
 import LandingScreen from './screens/LandingScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import LoginScreen from './screens/LoginScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
-import HomeScreen from './screens/HomeScreen';
 import HelperSetupScreen from './screens/HelperSetupScreen';
+import HomeScreen from './screens/HomeScreen';
+import EditProfileScreen from './screens/EditProfileScreen';  
 
 const Stack = createStackNavigator();
 
 const Navigation = () => {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (initializing) setInitializing(false);
+    });
+
+    return unsubscribe;
+  }, [initializing]);
+
+  if (initializing) {
+    return null; // Or a loading screen
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Landing">
-        <Stack.Screen name="Landing" component={LandingScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="SignUp" component={SignUpScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Navigator>
+        {user ? (
+          // User is signed in
+          <Stack.Screen 
+            name="Home" 
+            component={HomeScreen} 
+            options={{ headerShown: false }}
+          />
+          
+        ) : (
+          // User is not signed in
+          <>
+            <Stack.Screen 
+              name="Landing" 
+              component={LandingScreen} 
+              options={{ headerShown: false }} 
+            />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        )}
         <Stack.Screen name="HelperSetup" component={HelperSetupScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
