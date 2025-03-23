@@ -9,7 +9,8 @@ import {
   TouchableOpacity, 
   KeyboardAvoidingView, 
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -23,12 +24,16 @@ import {
   orderBy, 
   onSnapshot, 
   updateDoc,
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  getDocs,
+  limit
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
 const ChatDetailsScreen = ({ route, navigation }) => {
-  const { chatId, otherUserId } = route.params;
+  const { chatId, otherUserId, jobId } = route.params;
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -56,6 +61,23 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         // If we already have a chat ID
         if (chatId) {
           chatDocRef = doc(db, 'chats', chatId);
+          
+          // Mark the chat as read by the current user
+          try {
+            const chatSnapshot = await getDoc(chatDocRef);
+            if (chatSnapshot.exists()) {
+              const chatData = chatSnapshot.data();
+              
+              // If the current user is in the unreadBy array, remove them
+              if (chatData.unreadBy && chatData.unreadBy.includes(user.uid)) {
+                await updateDoc(chatDocRef, {
+                  unreadBy: arrayRemove(user.uid)
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error marking chat as read:', error);
+          }
           
           // Check if chat exists and has job info
           const chatDoc = await getDoc(chatDocRef);
@@ -87,27 +109,74 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           querySnapshot.forEach((doc) => {
             const chatData = doc.data();
             if (chatData.participants.includes(otherUserId)) {
-              existingChat = {
-                id: doc.id,
-                ...chatData
-              };
+              if (jobId) {
+                if (chatData.jobId === jobId) {
+                  existingChat = {
+                    id: doc.id,
+                    ...chatData
+                  };
+                }
+              } else if (!chatData.jobId) {
+                existingChat = {
+                  id: doc.id,
+                  ...chatData
+                };
+              }
             }
           });
           
           // Use existing chat or create a new one
           if (existingChat) {
             chatDocRef = doc(db, 'chats', existingChat.id);
+            
+            // Mark the chat as read by the current user
+            try {
+              await updateDoc(chatDocRef, {
+                unreadBy: arrayRemove(user.uid)
+              });
+            } catch (error) {
+              console.error('Error marking existing chat as read:', error);
+            }
+            
             messagesQuery = query(
               collection(db, 'chats', existingChat.id, 'messages'),
               orderBy('createdAt', 'asc')
             );
+            
+            // If chat has job info, fetch job details
+            if (existingChat.jobId) {
+              const jobDoc = await getDoc(doc(db, 'jobs', existingChat.jobId));
+              if (jobDoc.exists()) {
+                setJobData({
+                  id: jobDoc.id,
+                  ...jobDoc.data()
+                });
+              }
+            }
           } else {
             // Create a new chat
-            const newChatRef = await addDoc(collection(db, 'chats'), {
+            const newChatData = {
               participants: [user.uid, otherUserId],
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              unreadBy: [] // Initialize with empty unreadBy array
+            };
+            
+            // If this chat is associated with a job, include the jobId
+            if (jobId) {
+              newChatData.jobId = jobId;
+              
+              // Fetch job data
+              const jobDoc = await getDoc(doc(db, 'jobs', jobId));
+              if (jobDoc.exists()) {
+                setJobData({
+                  id: jobDoc.id,
+                  ...jobDoc.data()
+                });
+              }
+            }
+            
+            const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
             
             chatDocRef = newChatRef;
             messagesQuery = query(
@@ -126,7 +195,9 @@ const ChatDetailsScreen = ({ route, navigation }) => {
             messagesList.push({
               id: doc.id,
               ...messageData,
-              createdAt: messageData.createdAt ? messageData.createdAt.toDate() : new Date(),
+              createdAt: messageData.createdAt ? 
+                (messageData.createdAt.toDate ? messageData.createdAt.toDate() : messageData.createdAt) 
+                : new Date(),
             });
           });
           
@@ -136,7 +207,7 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           // Scroll to bottom on new messages
           if (messagesList.length > 0 && flatListRef.current) {
             setTimeout(() => {
-              flatListRef.current.scrollToEnd({ animated: true });
+              flatListRef.current.scrollToEnd({ animated: false });
             }, 200);
           }
         });
@@ -149,54 +220,98 @@ const ChatDetailsScreen = ({ route, navigation }) => {
     };
     
     setupChat();
-  }, [chatId, otherUserId]);
+  }, [chatId, otherUserId, jobId]);
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
     
     try {
-      const currentChatId = chatId || 
-        (await getDocs(
+      let currentChatId = chatId;
+      
+      // If we don't have a chat ID but have otherUserId, find or create a chat
+      if (!currentChatId && otherUserId) {
+        // Try to find an existing chat between these users
+        const chatsQuerySnapshot = await getDocs(
           query(
             collection(db, 'chats'),
-            where('participants', '==', [user.uid, otherUserId].sort())
+            where('participants', 'array-contains', user.uid)
           )
-        )).docs[0]?.id;
-
-      // If we have a current chat ID
+        );
+        
+        let existingChat = null;
+        
+        chatsQuerySnapshot.forEach((doc) => {
+          const chatData = doc.data();
+          if (chatData.participants.includes(otherUserId)) {
+            if (jobId) {
+              if (chatData.jobId === jobId) {
+                existingChat = { id: doc.id, ...chatData };
+              }
+            } else if (!chatData.jobId) {
+              existingChat = { id: doc.id, ...chatData };
+            }
+          }
+        });
+        
+        if (existingChat) {
+          currentChatId = existingChat.id;
+        } else {
+          // Create a new chat
+          const newChatData = {
+            participants: [user.uid, otherUserId],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            lastMessage: inputText.trim(),
+            // Initialize with unread for the recipient
+            unreadBy: [otherUserId]
+          };
+          
+          if (jobId) {
+            newChatData.jobId = jobId;
+          }
+          
+          const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
+          currentChatId = newChatRef.id;
+        }
+      }
+  
       if (currentChatId) {
         // Add the message
         await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
           text: inputText.trim(),
           senderId: user.uid,
-          createdAt: serverTimestamp(),
+          createdAt: new Date(),
         });
         
-        // Update the chat's last message and timestamp
-        await updateDoc(doc(db, 'chats', currentChatId), {
-          lastMessage: inputText.trim(),
-          updatedAt: serverTimestamp(),
-        });
-      } 
-      // If we need to create a new chat
-      else if (otherUserId) {
-        const newChatRef = await addDoc(collection(db, 'chats'), {
-          participants: [user.uid, otherUserId],
-          lastMessage: inputText.trim(),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        // Update the chat's last message, timestamp, and unread status
+        // Get current chat data to check the unreadBy array
+        const chatDoc = await getDoc(doc(db, 'chats', currentChatId));
+        const chatData = chatDoc.exists() ? chatDoc.data() : {};
         
-        await addDoc(collection(db, 'chats', newChatRef.id, 'messages'), {
-          text: inputText.trim(),
-          senderId: user.uid,
-          createdAt: serverTimestamp(),
-        });
+        // Get the other participant ID
+        const otherParticipantId = chatData.participants?.find(id => id !== user.uid);
+        
+        // Simple direct approach: set unreadBy to include only the other user
+        if (otherParticipantId) {
+          await updateDoc(doc(db, 'chats', currentChatId), {
+            lastMessage: inputText.trim(),
+            updatedAt: new Date(),
+            unreadBy: [otherParticipantId]
+          });
+        } else {
+          await updateDoc(doc(db, 'chats', currentChatId), {
+            lastMessage: inputText.trim(),
+            updatedAt: new Date()
+          });
+        }
+        
+        setInputText('');
+      } else {
+        console.error('No chat ID available');
       }
-      
-      setInputText('');
     } catch (error) {
       console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
 
@@ -212,7 +327,12 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           styles.messageBubble,
           isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
         ]}>
-          <Text style={styles.messageText}>{item.text}</Text>
+          <Text style={[
+            styles.messageText, 
+            isMyMessage ? styles.myMessageText : styles.otherMessageText
+          ]}>
+            {item.text}
+          </Text>
         </View>
         <Text style={styles.messageTime}>
           {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -264,6 +384,8 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           onChangeText={setInputText}
           placeholder="Type a message..."
           multiline
+          autoComplete="off"
+          textContentType="none"
         />
         <TouchableOpacity 
           style={styles.sendButton}
@@ -333,10 +455,12 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 16,
-    color: '#333',
   },
   myMessageText: {
     color: 'white',
+  },
+  otherMessageText: {
+    color: '#333',
   },
   messageTime: {
     fontSize: 10,

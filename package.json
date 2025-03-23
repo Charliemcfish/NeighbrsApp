@@ -25,7 +25,10 @@
     "react-native": "0.76.7",
     "react-native-gesture-handler": "^2.24.0",
     "react-native-safe-area-context": "^5.3.0",
-    "react-native-screens": "^4.9.2"
+    "react-native-screens": "^4.9.2",
+    "react-dom": "18.3.1",
+    "react-native-web": "~0.19.13",
+    "@expo/metro-runtime": "~4.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

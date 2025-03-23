@@ -8,7 +8,10 @@ import {
   TouchableOpacity, 
   Alert,
   TextInput,
-  ActivityIndicator 
+  ActivityIndicator,
+  ToastAndroid,
+  Platform,
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -33,6 +36,8 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [hasOffered, setHasOffered] = useState(false);
   const [creatorProfile, setCreatorProfile] = useState(null);
   const [helperProfile, setHelperProfile] = useState(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastOpacity] = useState(new Animated.Value(0));
 
   useEffect(() => {
     loadJobDetails();
@@ -102,6 +107,30 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  const showToast = (message) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      // iOS doesn't have ToastAndroid, so we'll make our own
+      setToastVisible(true);
+      Animated.sequence([
+        Animated.timing(toastOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.delay(2000),
+        Animated.timing(toastOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setToastVisible(false);
+      });
+    }
+  };
+
   const handleMakeOffer = async () => {
     if (job.paymentType === 'fixed' && !offerAmount) {
       Alert.alert('Error', 'Please enter an offer amount');
@@ -123,16 +152,9 @@ const JobDetailsScreen = ({ route, navigation }) => {
         offers: arrayUnion(offerData)
       });
 
-      Alert.alert(
-        'Success',
-        'Your offer has been sent!',
-        [
-          {
-            text: 'OK',
-            onPress: () => loadJobDetails()
-          }
-        ]
-      );
+      // Show toast instead of Alert
+      showToast('Offer sent successfully!');
+      loadJobDetails();
     } catch (error) {
       Alert.alert('Error', error.message);
     }
@@ -242,6 +264,47 @@ const JobDetailsScreen = ({ route, navigation }) => {
     );
   };
 
+  const handleOpenChat = async (otherUserId) => {
+    try {
+      // First check if a chat exists for this job
+      const chatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', auth.currentUser.uid)
+      );
+      
+      const querySnapshot = await getDocs(chatsQuery);
+      let existingChatId = null;
+      
+      // Look for a chat with this job ID and the other user
+      querySnapshot.forEach((doc) => {
+        const chatData = doc.data();
+        if (chatData.jobId === jobId && chatData.participants.includes(otherUserId)) {
+          existingChatId = doc.id;
+        }
+      });
+      
+      // Navigate to the chat
+      navigation.navigate('Messages', { 
+        screen: 'ChatDetails',
+        params: { 
+          chatId: existingChatId, // Will be null if no chat exists yet
+          otherUserId: otherUserId,
+          jobId: jobId
+        } 
+      });
+    } catch (error) {
+      console.error("Error finding chat:", error);
+      // Fallback to just passing the other user ID
+      navigation.navigate('Messages', { 
+        screen: 'ChatDetails',
+        params: { 
+          otherUserId: otherUserId,
+          jobId: jobId
+        } 
+      });
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -332,12 +395,23 @@ const JobDetailsScreen = ({ route, navigation }) => {
                 <Text style={styles.offerAmount}>
                   ${offer.amount.toFixed(2)}
                 </Text>
-                <TouchableOpacity 
-                  style={styles.acceptButton}
-                  onPress={() => handleAcceptOffer(offer)}
-                >
-                  <Text style={styles.acceptButtonText}>Accept</Text>
-                </TouchableOpacity>
+                <View style={styles.offerActionButtons}>
+                  {/* Add a chat button */}
+                  <TouchableOpacity 
+                    style={styles.chatOfferButton}
+                    onPress={() => handleOpenChat(offer.userId)}
+                  >
+                    <Ionicons name="chatbubble-outline" size={16} color="white" />
+                    <Text style={styles.chatOfferButtonText}>Chat</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.acceptButton}
+                    onPress={() => handleAcceptOffer(offer)}
+                  >
+                    <Text style={styles.acceptButtonText}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               
               {offer.note && (
@@ -368,6 +442,9 @@ const JobDetailsScreen = ({ route, navigation }) => {
                 onChangeText={setOfferAmount}
                 placeholder="Enter your price"
                 keyboardType="numeric"
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
               />
             </View>
           )}
@@ -381,6 +458,9 @@ const JobDetailsScreen = ({ route, navigation }) => {
               placeholder="Add a note about your offer..."
               multiline
               numberOfLines={3}
+              autoComplete="off"
+              textContentType="none"
+              importantForAutofill="no"
             />
           </View>
           
@@ -396,54 +476,66 @@ const JobDetailsScreen = ({ route, navigation }) => {
       )}
       
       {/* Action buttons based on job status and user role */}
-      {job.status === 'accepted' && (isCreator || isHelper) && (
-        <View style={styles.actionContainer}>
+      <View style={styles.actionButtonsContainer}>
+        {job.status === 'accepted' && (isCreator || isHelper) && (
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={handleStartJob}
           >
             <Text style={styles.actionButtonText}>Start Job</Text>
           </TouchableOpacity>
-        </View>
-      )}
-      
-      {job.status === 'in-progress' && (isCreator || isHelper) && (
-        <View style={styles.actionContainer}>
+        )}
+        
+        {job.status === 'in-progress' && (isCreator || isHelper) && (
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={handleCompleteJob}
           >
             <Text style={styles.actionButtonText}>Mark as Completed</Text>
           </TouchableOpacity>
-        </View>
-      )}
-      
-      {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress') && isCreator && (
-        <View style={styles.actionContainer}>
+        )}
+        
+        {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress') && isCreator && (
           <TouchableOpacity 
             style={[styles.actionButton, styles.cancelButton]}
             onPress={handleCancelJob}
           >
             <Text style={styles.cancelButtonText}>Cancel Job</Text>
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+        
+        {/* Chat button for accepted/in-progress jobs */}
+        {(job.status === 'accepted' || job.status === 'in-progress') && (isCreator || isHelper) && (
+          <TouchableOpacity 
+            style={styles.chatActionButton}
+            onPress={() => handleOpenChat(isCreator ? job.helperAssigned : job.createdBy)}
+          >
+            <Ionicons name="chatbubble-ellipses" size={20} color="white" style={styles.chatButtonIcon} />
+            <Text style={styles.chatButtonText}>Chat</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Chat button for helpers who made an offer */}
+        {!isCreator && job.status === 'open' && hasOffered && (
+          <TouchableOpacity 
+            style={styles.chatActionButton}
+            onPress={() => handleOpenChat(job.createdBy)}
+          >
+            <Ionicons name="chatbubble-ellipses" size={20} color="white" style={styles.chatButtonIcon} />
+            <Text style={styles.chatButtonText}>Chat with Job Poster</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       
-      {/* Chat button - visible if job is accepted or in progress */}
-      {(job.status === 'accepted' || job.status === 'in-progress') && (isCreator || isHelper) && (
-        <TouchableOpacity 
-          style={styles.chatButton}
-          onPress={() => navigation.navigate('Messages', { 
-            screen: 'ChatDetails',
-            params: { 
-              chatId: job.id,
-              otherUserId: isCreator ? job.helperAssigned : job.createdBy
-            } 
-          })}
+      {Platform.OS === 'ios' && toastVisible && (
+        <Animated.View 
+          style={[
+            styles.toast, 
+            { opacity: toastOpacity }
+          ]}
         >
-          <Ionicons name="chatbubble-ellipses" size={24} color="white" />
-          <Text style={styles.chatButtonText}>Chat</Text>
-        </TouchableOpacity>
+          <Text style={styles.toastText}>Offer sent successfully!</Text>
+        </Animated.View>
       )}
     </ScrollView>
   );
@@ -586,6 +678,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4A90E2',
   },
+  offerActionButtons: {
+    flexDirection: 'row',
+  },
+  chatOfferButton: {
+    backgroundColor: '#4A90E2',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  chatOfferButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: 5,
+  },
   acceptButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 5,
@@ -640,9 +749,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  actionContainer: {
-    backgroundColor: 'white',
+  actionButtonsContainer: {
     padding: 15,
+    backgroundColor: 'white',
     marginBottom: 15,
   },
   actionButton: {
@@ -650,6 +759,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 15,
     alignItems: 'center',
+    marginBottom: 10,
   },
   actionButtonText: {
     color: 'white',
@@ -664,27 +774,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  chatButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
+  chatActionButton: {
     backgroundColor: '#4A90E2',
+    borderRadius: 10,
+    padding: 15,
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    marginTop: 10,
+  },
+  chatButtonIcon: {
+    marginRight: 10,
   },
   chatButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 8,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  toastText: {
+    color: 'white',
+    fontSize: 16,
   },
 });
 

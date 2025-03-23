@@ -6,7 +6,8 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity, 
-  ActivityIndicator 
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -14,10 +15,13 @@ import {
   query, 
   where, 
   orderBy, 
-  getDocs, 
+  getDocs,
   onSnapshot,
   doc,
-  getDoc
+  getDoc,
+  limit,
+  updateDoc,
+  arrayRemove
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
@@ -37,24 +41,34 @@ const ChatsListScreen = ({ navigation }) => {
         // Query chats where the current user is a participant
         const chatsQuery = query(
           collection(db, 'chats'),
-          where('participants', 'array-contains', user.uid),
-          orderBy('updatedAt', 'desc')
+          where('participants', 'array-contains', user.uid)
         );
 
+        // Use onSnapshot for real-time updates
         const unsubscribe = onSnapshot(chatsQuery, async (querySnapshot) => {
           const chatsList = [];
           
+          // Process each chat document
           for (const chatDoc of querySnapshot.docs) {
             const chatData = chatDoc.data();
+            
+            // Skip chats without participants
+            if (!chatData.participants) {
+              continue;
+            }
             
             // Get the other participant's info
             const otherParticipantId = chatData.participants.find(id => id !== user.uid);
             let otherParticipantName = 'Unknown User';
+            let otherParticipantImage = null;
             
             if (otherParticipantId) {
               const userDoc = await getDoc(doc(db, 'users', otherParticipantId));
               if (userDoc.exists()) {
-                otherParticipantName = userDoc.data().fullName;
+                const userData = userDoc.data();
+                otherParticipantName = userData.fullName;
+                // Also get the profile image
+                otherParticipantImage = userData.profileImage || null;
               }
             }
             
@@ -70,20 +84,50 @@ const ChatsListScreen = ({ navigation }) => {
               }
             }
             
-            chatsList.push({
+            // Get the most recent message
+            let lastMessage = 'No messages yet';
+            try {
+              const messagesQuery = query(
+                collection(db, 'chats', chatDoc.id, 'messages'),
+                orderBy('createdAt', 'desc'),
+                limit(1)
+              );
+              
+              const messagesSnapshot = await getDocs(messagesQuery);
+              
+              if (!messagesSnapshot.empty) {
+                const messageData = messagesSnapshot.docs[0].data();
+                lastMessage = messageData.text || 'No text';
+              }
+            } catch (error) {
+              console.error('Error fetching messages:', error);
+              // Continue with default lastMessage value
+            }
+            
+            // Check if there are unread messages
+            const hasUnread = chatData.unreadBy && chatData.unreadBy.includes(user.uid);
+            
+            const chatObject = {
               id: chatDoc.id,
               ...chatData,
               otherParticipantName,
+              otherParticipantImage,
               jobInfo,
-              updatedAt: chatData.updatedAt.toDate(),
-              lastMessage: chatData.lastMessage || 'No messages yet',
-            });
+              updatedAt: chatData.updatedAt ? 
+                (chatData.updatedAt.toDate ? chatData.updatedAt.toDate() : chatData.updatedAt) 
+                : new Date(),
+              lastMessage: chatData.lastMessage || lastMessage,
+              hasUnread
+            };
+            
+            chatsList.push(chatObject);
           }
+          
+          // Sort chats by most recent first
+          chatsList.sort((a, b) => b.updatedAt - a.updatedAt);
           
           setChats(chatsList);
           setLoading(false);
-
-          // screens/messages/ChatsListScreen.js (continued)
         });
 
         return () => unsubscribe();
@@ -96,26 +140,53 @@ const ChatsListScreen = ({ navigation }) => {
     loadChats();
   }, []);
 
+  const handleOpenChat = async (chat) => {
+    // Mark the chat as read when opened
+    if (chat.hasUnread) {
+      try {
+        await updateDoc(doc(db, 'chats', chat.id), {
+          unreadBy: arrayRemove(auth.currentUser.uid)
+        });
+      } catch (error) {
+        console.error('Error marking chat as read:', error);
+      }
+    }
+    
+    // Navigate to the chat
+    navigation.navigate('ChatDetails', { 
+      chatId: chat.id,
+      chatName: chat.otherParticipantName,
+      otherUserId: chat.participants.find(id => id !== auth.currentUser.uid),
+      jobId: chat.jobId
+    });
+  };
+
   const renderChatItem = ({ item }) => (
     <TouchableOpacity 
-      style={styles.chatItem}
-      onPress={() => navigation.navigate('ChatDetails', { 
-        chatId: item.id,
-        chatName: item.otherParticipantName,
-        otherUserId: item.participants.find(id => id !== auth.currentUser.uid)
-      })}
+      style={[styles.chatItem, item.hasUnread && styles.unreadChatItem]}
+      onPress={() => handleOpenChat(item)}
     >
       <View style={styles.avatarContainer}>
-        <Text style={styles.avatarText}>
-          {item.otherParticipantName.charAt(0).toUpperCase()}
-        </Text>
+        {item.otherParticipantImage ? (
+          <Image 
+            source={{ uri: item.otherParticipantImage }} 
+            style={styles.avatarImage} 
+          />
+        ) : (
+          <Text style={styles.avatarText}>
+            {item.otherParticipantName.charAt(0).toUpperCase()}
+          </Text>
+        )}
+        {item.hasUnread && <View style={styles.unreadDot} />}
       </View>
       
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
-          <Text style={styles.chatName}>{item.otherParticipantName}</Text>
+          <Text style={[styles.chatName, item.hasUnread && styles.unreadText]}>
+            {item.otherParticipantName}
+          </Text>
           <Text style={styles.chatTime}>
-            {new Date(item.updatedAt).toLocaleDateString()}
+            {item.updatedAt.toLocaleDateString()}
           </Text>
         </View>
         
@@ -125,7 +196,10 @@ const ChatsListScreen = ({ navigation }) => {
           </Text>
         )}
         
-        <Text style={styles.lastMessage} numberOfLines={1}>
+        <Text 
+          style={[styles.lastMessage, item.hasUnread && styles.unreadText]} 
+          numberOfLines={1}
+        >
           {item.lastMessage}
         </Text>
       </View>
@@ -180,6 +254,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  unreadChatItem: {
+    backgroundColor: '#f0f7ff', // Light blue background for unread chats
+  },
   avatarContainer: {
     width: 50,
     height: 50,
@@ -188,11 +265,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
+    position: 'relative', // For positioning the unread dot
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   avatarText: {
     color: 'white',
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'red',
+    borderWidth: 2,
+    borderColor: 'white',
   },
   chatInfo: {
     flex: 1,
@@ -205,6 +299,10 @@ const styles = StyleSheet.create({
   chatName: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  unreadText: {
+    fontWeight: 'bold',
+    color: '#333', // Darker text for unread messages
   },
   chatTime: {
     fontSize: 12,

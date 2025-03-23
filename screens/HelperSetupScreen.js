@@ -48,19 +48,19 @@ const HelperSetupScreen = ({ route, navigation }) => {
       Alert.alert('Error', 'Please select at least one job type');
       return;
     }
-
+  
     if (!helpDescription) {
       Alert.alert('Error', 'Please describe how you can help');
       return;
     }
-
+  
     if (!accountName || !accountNumber || !routingNumber) {
       Alert.alert('Error', 'Please fill in all bank account details');
       return;
     }
-
+  
     setLoading(true);
-
+  
     try {
       await updateDoc(doc(db, 'users', userId), {
         jobTypes: selectedJobTypes,
@@ -70,16 +70,23 @@ const HelperSetupScreen = ({ route, navigation }) => {
           accountNumber,
           routingNumber,
         },
+        isHelper: true, // Make sure this is set to true
         helperSetupComplete: true,
       });
-
+  
       Alert.alert(
         'Success',
         'Your helper profile is set up!',
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Home')
+            onPress: () => {
+              // Refresh the main app state to reflect the change
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }]
+              });
+            }
           }
         ]
       );
@@ -140,7 +147,7 @@ const HelperSetupScreen = ({ route, navigation }) => {
         </Text>
         
         <Text style={styles.label}>Account Holder Name</Text>
-        <TextInput
+        <TextInput 
           style={styles.input}
           value={accountName}
           onChangeText={setAccountName}
@@ -148,7 +155,8 @@ const HelperSetupScreen = ({ route, navigation }) => {
         />
         
         <Text style={styles.label}>Account Number</Text>
-        <TextInput
+        <TextInput 
+        
           style={styles.input}
           value={accountNumber}
           onChangeText={setAccountNumber}

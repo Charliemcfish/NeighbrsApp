@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { View, Text, StyleSheet } from 'react-native';
 import { auth, db } from '../firebase';
 
-// Import tab screens (we'll create these next)
+// Import tab screens
 import DashboardScreen from './tabs/DashboardScreen';
 import JobsScreen from './tabs/JobsScreen';
 import MessagesScreen from './tabs/MessagesScreen';
@@ -16,6 +17,7 @@ const Tab = createBottomTabNavigator();
 const HomeScreen = () => {
   const [userType, setUserType] = useState('neighbor'); // Default as neighbor
   const [loading, setLoading] = useState(true);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -39,6 +41,58 @@ const HomeScreen = () => {
     };
 
     getUserData();
+  }, []);
+
+  useEffect(() => {
+    const checkUnreadMessages = async () => {
+      try {
+        const user = auth.currentUser;
+        
+        if (!user) return;
+        
+        console.log('Checking unread messages for user:', user.uid);
+        
+        const chatsQuery = query(
+          collection(db, 'chats'),
+          where('participants', 'array-contains', user.uid)
+        );
+        
+        const unsubscribe = onSnapshot(chatsQuery, (querySnapshot) => {
+          console.log(`Found ${querySnapshot.docs.length} chats`);
+          let unreadCount = 0;
+          
+          querySnapshot.forEach((chatDoc) => {
+            const chatData = chatDoc.data();
+            console.log(`Chat ${chatDoc.id} unreadBy:`, chatData.unreadBy);
+            
+            // Check if this chat has unread messages for the current user
+            if (chatData.unreadBy && chatData.unreadBy.includes(user.uid)) {
+              unreadCount++;
+              console.log(`Chat ${chatDoc.id} is unread`);
+            }
+          });
+          
+          console.log('Total unread count:', unreadCount);
+          setUnreadMessages(unreadCount);
+        });
+        
+        return () => {
+          console.log('Cleaning up unread message listener');
+          unsubscribe();
+        };
+      } catch (error) {
+        console.error('Error checking unread messages:', error);
+      }
+    };
+    
+    console.log('Setting up unread message listener');
+    const unsubscribeFromMessages = checkUnreadMessages();
+    
+    return () => {
+      if (unsubscribeFromMessages) {
+        unsubscribeFromMessages();
+      }
+    };
   }, []);
 
   if (loading) {
@@ -79,7 +133,22 @@ const HomeScreen = () => {
       />
       <Tab.Screen 
         name="Messages" 
-        component={MessagesScreen} 
+        component={MessagesScreen}
+        options={{
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconName = focused ? 'chatbubble' : 'chatbubble-outline';
+            return (
+              <View>
+                <Ionicons name={iconName} size={size} color={color} />
+                {unreadMessages > 0 && (
+                  <View style={styles.badgeContainer}>
+                    <Text style={styles.badgeText}>{unreadMessages}</Text>
+                  </View>
+                )}
+              </View>
+            );
+          }
+        }}
       />
       <Tab.Screen 
         name="Profile" 
@@ -89,5 +158,25 @@ const HomeScreen = () => {
     </Tab.Navigator>
   );
 };
+
+const styles = StyleSheet.create({
+  badgeContainer: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    backgroundColor: 'red',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+});
 
 export default HomeScreen;

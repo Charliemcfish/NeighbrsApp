@@ -21,6 +21,8 @@ const MessagesScreen = () => {
         component={ChatDetailsScreen} 
         options={({ route }) => ({ title: route.params.chatName || 'Chat' })}
       />
+
+      
     </Stack.Navigator>
   );
 };

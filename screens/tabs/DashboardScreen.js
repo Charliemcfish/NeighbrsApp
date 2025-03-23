@@ -16,6 +16,8 @@ const DashboardScreen = ({ route, navigation }) => {
           You're logged in as a {userType}
         </Text>
       </View>
+
+      
       
       <View style={styles.actionsContainer}>
         <TouchableOpacity 
