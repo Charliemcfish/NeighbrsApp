@@ -714,10 +714,12 @@ const styles = StyleSheet.create({
     color: '#f44336',
   },
   jobDetailsContainer: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white, // Changed from background to white
     borderRadius: 15,
     padding: 15,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
   },
   jobInfoRow: {
     flexDirection: 'row',
@@ -752,10 +754,12 @@ const styles = StyleSheet.create({
     color: COLORS.textDark,
   },
   helperAssignedContainer: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white, // Changed from background to white
     borderRadius: 15,
     padding: 15,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
   },
   helperInfo: {
     flexDirection: 'row',

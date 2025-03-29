@@ -228,7 +228,7 @@ const ChatsListScreen = ({ navigation }) => {
             />
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="chatbubbles-outline" size={80} color="#ccc" />
+              <Ionicons name="chatbubbles-outline" size={80} color="#000" />
               <Text style={styles.emptyText}>No messages yet</Text>
               <Text style={styles.emptySubText}>
                 Messages will appear here when you start chatting with helpers or neighbors
@@ -362,12 +362,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginTop: 15,
-    color: COLORS.textDark,
+    color: COLORS.black, // Changed from textDark to black
   },
   emptySubText: {
     ...FONTS.body,
     fontSize: 16,
-    color: COLORS.textMedium,
+    color: COLORS.black, // Changed from textMedium to black
     textAlign: 'center',
     marginTop: 10,
     paddingHorizontal: 20,

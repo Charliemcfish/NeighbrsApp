@@ -11,7 +11,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Image
+  Image,
+  ImageBackground
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -426,16 +427,22 @@ const ChatDetailsScreen = ({ route, navigation }) => {
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
       ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesContainer}
-          onContentSizeChange={() => 
-            messages.length > 0 && flatListRef.current.scrollToEnd({ animated: false })
-          }
-        />
+        <ImageBackground
+          source={require('../../assets/logo.png')}
+          style={styles.backgroundImage}
+          imageStyle={styles.backgroundImageStyle}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messagesContainer}
+            onContentSizeChange={() => 
+              messages.length > 0 && flatListRef.current.scrollToEnd({ animated: false })
+            }
+          />
+        </ImageBackground>
       )}
       
       <View style={styles.inputContainer}>
@@ -479,7 +486,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: COLORS.primary,
-    paddingTop: 20,
+    paddingTop: 50, // Increased for notch/speaker
     paddingBottom: 15,
     paddingHorizontal: 15,
   },
@@ -518,14 +525,24 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
   },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+  },
+  backgroundImageStyle: {
+    opacity: 0.05,
+    resizeMode: 'contain',
+  },
   messagesContainer: {
-    padding: 15,
+    padding: 10,
+    paddingHorizontal: 5, // Reduced horizontal padding
     paddingBottom: 20,
   },
   messageContainer: {
     flexDirection: 'row',
     marginBottom: 20,
     alignItems: 'flex-end',
+    paddingHorizontal: 0, // Remove horizontal padding
   },
   myMessageContainer: {
     justifyContent: 'flex-end',
@@ -536,8 +553,8 @@ const styles = StyleSheet.create({
   messageAvatar: {
     width: 36,
     height: 36,
-    marginLeft: 8,
-    marginRight: 8,
+    marginLeft: 2, // Reduced margin
+    marginRight: 2, // Reduced margin
   },
   avatarImage: {
     width: 36,
@@ -601,7 +618,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white, // Changed from background to white
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingVertical: 10,
@@ -610,6 +627,8 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     color: COLORS.textDark,
     maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
   },
   sendButton: {
     width: 45,

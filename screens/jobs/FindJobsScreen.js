@@ -310,7 +310,7 @@ const FindJobsScreen = ({ navigation, route }) => {
             />
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="search-outline" size={64} color="#ccc" />
+              <Ionicons name="search-outline" size={64} color="#000" />
               <Text style={styles.emptyText}>No jobs found</Text>
               <Text style={styles.emptySubText}>
                 {activeTab === 'available' 
@@ -541,12 +541,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 15,
-    color: COLORS.textMedium,
+    color: COLORS.black, // Changed from textMedium to black
   },
   emptySubText: {
     ...FONTS.body,
     fontSize: 16,
-    color: COLORS.textLight,
+    color: COLORS.black, // Changed from textLight to black
     textAlign: 'center',
     marginTop: 10,
     paddingHorizontal: 20,

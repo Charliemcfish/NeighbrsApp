@@ -14,7 +14,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
-
+import Input from '../components/Input';
+import Button from '../components/Button';
+import { COLORS, FONTS, SHADOWS } from '../styles/theme';
 
 const EditProfileScreen = ({ route, navigation }) => {
   const { userProfile } = route.params;
@@ -98,87 +100,104 @@ const EditProfileScreen = ({ route, navigation }) => {
 
   return (
     <KeyboardAvoidingWrapper>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>X</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <View style={{ width: 50 }} />
+        </View>
 
-    <ScrollView style={styles.container}>
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>Edit Profile</Text>
-        
-        {/* Profile Image Picker */}
-        <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
-          {profileImage ? (
-            <Image source={{ uri: profileImage }} style={styles.profileImage} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.imagePlaceholderText}>Add Photo</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        
-        {/* Form Fields */}
-        <Text style={styles.label}>Full Name*</Text>
-        <TextInput
-          style={styles.input}
-          value={fullName}
-          onChangeText={setFullName}
-          placeholder="Enter your full name"
-        />
-        
-        <Text style={styles.label}>Address*</Text>
-        <TextInput
-          style={styles.input}
-          value={address}
-          onChangeText={setAddress}
-          placeholder="Enter your address"
-        />
-        
-        <Text style={styles.label}>About Me</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={aboutMe}
-          onChangeText={setAboutMe}
-          placeholder="Tell your neighbors a bit about yourself"
-          multiline
-          numberOfLines={4}
-        />
-        
-        {/* Update Button */}
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.disabledButton]} 
-          onPress={handleUpdateProfile}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Updating...' : 'Update Profile'}
-          </Text>
-        </TouchableOpacity>
-        
-        {/* Cancel Button */}
-        <TouchableOpacity 
-          style={styles.cancelButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
+        <ScrollView style={styles.formContainer}>
+          {/* Profile Image Picker */}
+          <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          {/* Form Fields */}
+          <Input
+            label="Full Name"
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="Enter your full name"
+            required
+          />
+          
+          <Input
+            label="Address"
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Enter your address"
+            required
+          />
+          
+          <Input
+            label="About Me"
+            value={aboutMe}
+            onChangeText={setAboutMe}
+            placeholder="Tell your neighbors a bit about yourself"
+            multiline
+            numberOfLines={4}
+          />
+          
+          {/* Update Button */}
+          <Button 
+            title={loading ? 'Updating...' : 'Update Profile'}
+            onPress={handleUpdateProfile}
+            disabled={loading}
+            style={styles.updateButton}
+            size="large"
+          />
+        </ScrollView>
       </View>
-    </ScrollView>
     </KeyboardAvoidingWrapper>
-
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: 50,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  backButton: {
+    width: 50,
+  },
+  backButtonText: {
+    ...FONTS.body,
+    color: COLORS.white,
+    fontSize: 24,
+  },
+  headerTitle: {
+    ...FONTS.heading,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'center',
   },
   formContainer: {
+    flex: 1,
     padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 30,
-    textAlign: 'center',
   },
   imagePickerContainer: {
     alignSelf: 'center',
@@ -188,60 +207,28 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
+    borderWidth: 3,
+    borderColor: COLORS.primary,
   },
   imagePlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#e1e1e1',
+    backgroundColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
   },
   imagePlaceholderText: {
-    color: '#555',
-  },
-  label: {
+    color: COLORS.primary,
+    ...FONTS.body,
     fontSize: 16,
-    marginBottom: 5,
-    color: '#333',
-    fontWeight: 'bold',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-    fontSize: 16,
-    backgroundColor: 'white',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  button: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  disabledButton: {
-    backgroundColor: '#a0c8f0',
-  },
-  cancelButton: {
-    marginTop: 15,
-    padding: 15,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
+  updateButton: {
+    marginTop: 20,
+    marginBottom: 30,
   },
 });
 

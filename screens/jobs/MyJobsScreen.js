@@ -210,7 +210,7 @@ const MyJobsScreen = ({ navigation }) => {
             />
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="document-text-outline" size={64} color="#ccc" />
+              <Ionicons name="document-text-outline" size={64} color="#000" />
               <Text style={styles.emptyText}>No jobs found</Text>
               <Text style={styles.emptySubText}>
                 {filter === 'open' ? 
@@ -379,9 +379,11 @@ const styles = StyleSheet.create({
   helperContainer: {
     marginTop: 5,
     marginBottom: 10,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white, // Changed from background to white
     borderRadius: 10,
     padding: 10,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
   },
   helperLabel: {
     ...FONTS.bodyBold,
@@ -451,12 +453,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginTop: 15,
-    color: COLORS.textDark,
+    color: COLORS.black, // Changed from textDark to black
   },
   emptySubText: {
     ...FONTS.body,
     fontSize: 16,
-    color: COLORS.textMedium,
+    color: COLORS.black, // Changed from textMedium to black
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 20,
