@@ -1,46 +1,134 @@
 // screens/tabs/DashboardScreen.js
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
+import Button from '../../components/Button';
 
 const DashboardScreen = ({ route, navigation }) => {
   const { userType } = route.params || {};
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUserName(userData.fullName || '');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  const handleNavigate = (screen, params = {}) => {
+    if (screen === 'PostJob') {
+      navigation.navigate('Jobs', { screen: 'PostJob' });
+    } else if (screen === 'MyJobs') {
+      navigation.navigate('Jobs', { screen: 'MyJobs' });
+    } else if (screen === 'FindJobs') {
+      // Make sure we're passing the initialTabName parameter correctly
+      navigation.navigate('Jobs', { 
+        screen: 'FindJobs',
+        params: params 
+      });
+    } else if (screen === 'Messages') {
+      navigation.navigate('Messages');
+    }
+  };
   
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.welcomeText}>
-          Welcome to Neighbrs
+          Welcome
         </Text>
-        <Text style={styles.subtitle}>
-          You're logged in as a {userType}
+        <Text style={styles.nameText}>
+          {userName}
         </Text>
       </View>
-
-      
       
       <View style={styles.actionsContainer}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Jobs', { screen: userType === 'neighbor' ? 'PostJob' : 'FindJobs' })}
-        >
-          <Ionicons 
-            name={userType === 'neighbor' ? 'add-circle' : 'search'} 
-            size={24} 
-            color="#4A90E2" 
-          />
-          <Text style={styles.actionText}>
-            {userType === 'neighbor' ? 'Post a New Job' : 'Find Available Jobs'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Messages')}
-        >
-          <Ionicons name="chatbubbles" size={24} color="#4A90E2" />
-          <Text style={styles.actionText}>View Messages</Text>
-        </TouchableOpacity>
+        {userType === 'neighbor' ? (
+          // Actions for neighbors
+          <>
+            <Button 
+              title="Post a New Job" 
+              onPress={() => handleNavigate('PostJob')}
+              style={styles.actionButton}
+              size="large"
+              icon="add-circle"
+            />
+            
+            <Button 
+              title="Browse Your Jobs" 
+              onPress={() => handleNavigate('MyJobs')}
+              style={styles.actionButton}
+              size="large"
+              icon="list"
+            />
+            
+            <Button 
+              title="View Closed Jobs" 
+              onPress={() => handleNavigate('MyJobs')}
+              style={styles.actionButton}
+              size="large"
+              icon="checkmark-circle"
+            />
+            
+            <Button 
+              title="Find A Helper" 
+              onPress={() => handleNavigate('FindJobs')}
+              style={styles.actionButton}
+              size="large"
+              icon="search"
+            />
+          </>
+        ) : (
+          // Actions for helpers
+          <>
+            <Button 
+              title="Find Available Jobs" 
+              onPress={() => handleNavigate('FindJobs')}
+              style={styles.actionButton}
+              size="large"
+              icon="search"
+            />
+            
+            <Button 
+              title="Your Current Jobs" 
+              onPress={() => handleNavigate('FindJobs', { initialTabName: 'current' })}
+              style={styles.actionButton}
+              size="large"
+              icon="briefcase"
+            />
+            
+            <Button 
+              title="Your Completed Jobs" 
+              onPress={() => handleNavigate('FindJobs', { initialTabName: 'completed' })}
+              style={styles.actionButton}
+              size="large"
+              icon="checkmark-done-circle"
+            />
+            
+            <Button 
+              title="Messages" 
+              onPress={() => handleNavigate('Messages')}
+              style={styles.actionButton}
+              size="large"
+              icon="chatbubbles"
+            />
+          </>
+        )}
       </View>
       
       <View style={styles.infoContainer}>
@@ -119,60 +207,51 @@ const DashboardScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
   },
   header: {
     padding: 20,
-    backgroundColor: '#4A90E2',
+    backgroundColor: COLORS.primary,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    marginBottom: 20,
   },
   welcomeText: {
+    ...FONTS.subheading,
     fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.white,
   },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+  nameText: {
+    ...FONTS.heading,
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: COLORS.white,
     marginTop: 5,
   },
   actionsContainer: {
-    padding: 20,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    margin: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  actionText: {
-    fontSize: 16,
-    marginLeft: 10,
+    width: '90%',
+    marginBottom: 15,
+    ...SHADOWS.medium,
   },
   infoContainer: {
-    padding: 20,
-    backgroundColor: 'white',
-    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
     margin: 15,
-    marginTop: 0,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    padding: 20,
+    ...SHADOWS.small,
   },
   sectionTitle: {
-    fontSize: 18,
+    ...FONTS.heading,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 15,
+    color: COLORS.textDark,
+    textAlign: 'center',
   },
   steps: {
     marginTop: 10,
@@ -180,31 +259,38 @@ const styles = StyleSheet.create({
   step: {
     flexDirection: 'row',
     marginBottom: 20,
+    alignItems: 'flex-start',
   },
   stepNumber: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#4A90E2',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
+    ...SHADOWS.small,
   },
   stepNumberText: {
-    color: 'white',
+    color: COLORS.white,
     fontWeight: 'bold',
+    fontSize: 18,
   },
   stepContent: {
     flex: 1,
   },
   stepTitle: {
-    fontSize: 16,
+    ...FONTS.subheading,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 5,
+    color: COLORS.textDark,
   },
   stepDesc: {
+    ...FONTS.body,
     fontSize: 14,
-    color: '#666',
+    color: COLORS.textMedium,
+    lineHeight: 20,
   },
 });
 

@@ -24,6 +24,7 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 
 const ChatsListScreen = ({ navigation }) => {
   const [chats, setChats] = useState([]);
@@ -173,9 +174,11 @@ const ChatsListScreen = ({ navigation }) => {
             style={styles.avatarImage} 
           />
         ) : (
-          <Text style={styles.avatarText}>
-            {item.otherParticipantName.charAt(0).toUpperCase()}
-          </Text>
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarText}>
+              {item.otherParticipantName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
         )}
         {item.hasUnread && <View style={styles.unreadDot} />}
       </View>
@@ -208,8 +211,12 @@ const ChatsListScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Messages</Text>
+      </View>
+      
       {loading ? (
-        <ActivityIndicator size="large" color="#4A90E2" style={styles.loader} />
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
       ) : (
         <>
           {chats.length > 0 ? (
@@ -221,7 +228,7 @@ const ChatsListScreen = ({ navigation }) => {
             />
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="chatbubbles-outline" size={64} color="#ccc" />
+              <Ionicons name="chatbubbles-outline" size={80} color="#ccc" />
               <Text style={styles.emptyText}>No messages yet</Text>
               <Text style={styles.emptySubText}>
                 Messages will appear here when you start chatting with helpers or neighbors
@@ -237,7 +244,21 @@ const ChatsListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerTitle: {
+    ...FONTS.heading,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'center',
   },
   loader: {
     flex: 1,
@@ -245,51 +266,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContainer: {
-    padding: 0,
+    padding: 10,
   },
   chatItem: {
     flexDirection: 'row',
     padding: 15,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    marginBottom: 10,
+    ...SHADOWS.small,
   },
   unreadChatItem: {
     backgroundColor: '#f0f7ff', // Light blue background for unread chats
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
   avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#4A90E2',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 15,
     position: 'relative', // For positioning the unread dot
   },
   avatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarText: {
-    color: 'white',
-    fontSize: 20,
+    ...FONTS.heading,
+    color: COLORS.white,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   unreadDot: {
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: 'red',
     borderWidth: 2,
     borderColor: 'white',
   },
   chatInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   chatHeader: {
     flexDirection: 'row',
@@ -297,25 +325,31 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   chatName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...FONTS.subheading,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textDark,
   },
   unreadText: {
+    ...FONTS.bodyBold,
     fontWeight: 'bold',
-    color: '#333', // Darker text for unread messages
+    color: COLORS.textDark, // Darker text for unread messages
   },
   chatTime: {
+    ...FONTS.body,
     fontSize: 12,
-    color: '#999',
+    color: COLORS.textLight,
   },
   jobTitle: {
+    ...FONTS.body,
     fontSize: 14,
-    color: '#4A90E2',
+    color: COLORS.primary,
     marginBottom: 5,
   },
   lastMessage: {
-    fontSize: 14,
-    color: '#666',
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textMedium,
   },
   emptyContainer: {
     flex: 1,
@@ -324,16 +358,19 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: {
-    fontSize: 18,
+    ...FONTS.subheading,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginTop: 10,
-    color: '#666',
+    marginTop: 15,
+    color: COLORS.textDark,
   },
   emptySubText: {
-    fontSize: 14,
-    color: '#999',
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textMedium,
     textAlign: 'center',
-    marginTop: 5,
+    marginTop: 10,
+    paddingHorizontal: 20,
   },
 });
 

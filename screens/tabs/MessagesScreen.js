@@ -10,7 +10,7 @@ const Stack = createStackNavigator();
 
 const MessagesScreen = () => {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen 
         name="ChatsList" 
         component={ChatsListScreen} 

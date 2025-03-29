@@ -6,11 +6,14 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
+import Button from '../../components/Button';
 
 const MyJobsScreen = ({ navigation }) => {
   const [jobs, setJobs] = useState([]);
@@ -49,15 +52,38 @@ const MyJobsScreen = ({ navigation }) => {
       const querySnapshot = await getDocs(jobsQuery);
       const jobsList = [];
       
-      querySnapshot.forEach((doc) => {
+      // Get all jobs
+      for (const doc of querySnapshot.docs) {
         jobsList.push({
           id: doc.id,
           ...doc.data(),
           createdAt: doc.data().createdAt.toDate(),
         });
-      });
+      }
 
-      setJobs(jobsList);
+      // For each job, get helper data if assigned
+      const enhancedJobsList = await Promise.all(
+        jobsList.map(async (job) => {
+          if (job.helperAssigned) {
+            try {
+              const helperDoc = await getDoc(doc(db, 'users', job.helperAssigned));
+              if (helperDoc.exists()) {
+                const helperData = helperDoc.data();
+                return {
+                  ...job,
+                  helperName: helperData.fullName,
+                  helperImage: helperData.profileImage
+                };
+              }
+            } catch (error) {
+              console.error('Error getting helper info:', error);
+            }
+          }
+          return job;
+        })
+      );
+
+      setJobs(enhancedJobsList);
     } catch (error) {
       console.error('Error loading jobs:', error);
     } finally {
@@ -71,13 +97,27 @@ const MyJobsScreen = ({ navigation }) => {
       onPress={() => navigation.navigate('JobDetails', { jobId: item.id })}
     >
       <View style={styles.jobHeader}>
-        <Text style={styles.jobTitle}>{item.title}</Text>
-        <Text style={[styles.statusBadge, styles[`status${item.status}`]]}>
-          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.jobTitle}>{item.title}</Text>
+          <Text style={[styles.statusBadge, styles[`status${item.status}`]]}>
+            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+          </Text>
+        </View>
       </View>
       
-      <Text style={styles.jobType}>{item.jobType}</Text>
+      <View style={styles.jobInfoRow}>
+        <View style={styles.jobInfoItem}>
+          <Ionicons name="briefcase-outline" size={18} color={COLORS.primary} />
+          <Text style={styles.jobType}>{item.jobType}</Text>
+        </View>
+        
+        {item.location && (
+          <View style={styles.jobInfoItem}>
+            <Ionicons name="location-outline" size={18} color={COLORS.primary} />
+            <Text style={styles.jobLocation}>{item.location}</Text>
+          </View>
+        )}
+      </View>
       
       <Text 
         style={styles.jobDesc}
@@ -85,6 +125,25 @@ const MyJobsScreen = ({ navigation }) => {
       >
         {item.description}
       </Text>
+      
+      {/* If there's a helper assigned, show their info */}
+      {item.helperAssigned && (
+        <View style={styles.helperContainer}>
+          <Text style={styles.helperLabel}>Helper:</Text>
+          <View style={styles.helperInfo}>
+            {item.helperImage ? (
+              <Image source={{ uri: item.helperImage }} style={styles.helperImage} />
+            ) : (
+              <View style={styles.helperImagePlaceholder}>
+                <Text style={styles.helperImageText}>
+                  {item.helperName ? item.helperName.charAt(0).toUpperCase() : '?'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.helperName}>{item.helperName || 'Unknown Helper'}</Text>
+          </View>
+        </View>
+      )}
       
       <View style={styles.jobFooter}>
         <Text style={styles.paymentInfo}>
@@ -103,6 +162,10 @@ const MyJobsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>My Jobs</Text>
+      </View>
+      
       <View style={styles.filterContainer}>
         <TouchableOpacity 
           style={[styles.filterButton, filter === 'open' && styles.activeFilter]}
@@ -133,7 +196,7 @@ const MyJobsScreen = ({ navigation }) => {
       </View>
       
       {loading ? (
-        <ActivityIndicator size="large" color="#4A90E2" style={styles.loader} />
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
       ) : (
         <>
           {jobs.length > 0 ? (
@@ -142,6 +205,8 @@ const MyJobsScreen = ({ navigation }) => {
               renderItem={renderJobItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContainer}
+              refreshing={loading}
+              onRefresh={loadJobs}
             />
           ) : (
             <View style={styles.emptyContainer}>
@@ -154,6 +219,15 @@ const MyJobsScreen = ({ navigation }) => {
                   "You don't have any jobs in progress." :
                   "You don't have any completed jobs yet."}
               </Text>
+              
+              {filter === 'open' && (
+                <Button
+                  title="Post a New Job"
+                  onPress={() => navigation.navigate('PostJob')}
+                  style={styles.emptyButton}
+                  size="large"
+                />
+              )}
             </View>
           )}
           
@@ -174,63 +248,83 @@ const MyJobsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerTitle: {
+    ...FONTS.heading,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'center',
   },
   filterContainer: {
     flexDirection: 'row',
-    padding: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: COLORS.white,
+    borderRadius: 30,
+    margin: 15,
+    padding: 5,
+    ...SHADOWS.small,
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 12,
     alignItems: 'center',
+    borderRadius: 25,
   },
   activeFilter: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#4A90E2',
+    backgroundColor: COLORS.primary,
   },
   filterText: {
+    ...FONTS.body,
     fontSize: 14,
-    color: '#666',
+    color: COLORS.textDark,
   },
   activeFilterText: {
-    color: '#4A90E2',
+    color: COLORS.white,
+    ...FONTS.bodyBold,
     fontWeight: 'bold',
   },
   listContainer: {
     padding: 15,
+    paddingBottom: 80, // Extra padding for FAB
   },
   jobCard: {
-    backgroundColor: 'white',
-    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
     padding: 15,
     marginBottom: 15,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...SHADOWS.small,
   },
   jobHeader: {
+    marginBottom: 10,
+  },
+  titleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 5,
   },
   jobTitle: {
+    ...FONTS.subheading,
     fontSize: 18,
     fontWeight: 'bold',
     flex: 1,
+    color: COLORS.textDark,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    fontSize: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 15,
+    fontSize: 14,
+    ...FONTS.bodyBold,
     fontWeight: 'bold',
+    marginLeft: 10,
   },
   statusopen: {
     backgroundColor: '#e3f2fd',
@@ -252,29 +346,94 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffebee',
     color: '#f44336',
   },
-  jobType: {
-    color: '#666',
-    fontSize: 14,
+  jobInfoRow: {
+    flexDirection: 'row',
     marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  jobInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 15,
+    marginBottom: 5,
+  },
+  jobType: {
+    ...FONTS.body,
+    color: COLORS.textMedium,
+    fontSize: 14,
+    marginLeft: 5,
+  },
+  jobLocation: {
+    ...FONTS.body,
+    color: COLORS.textMedium,
+    fontSize: 14,
+    marginLeft: 5,
   },
   jobDesc: {
-    fontSize: 14,
-    color: '#333',
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
+    marginBottom: 15,
+    lineHeight: 22,
+  },
+  helperContainer: {
+    marginTop: 5,
     marginBottom: 10,
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    padding: 10,
+  },
+  helperLabel: {
+    ...FONTS.bodyBold,
+    color: COLORS.textDark,
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  helperInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  helperImage: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+  },
+  helperImagePlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  helperImageText: {
+    color: COLORS.white,
+    ...FONTS.bodyBold,
+    fontSize: 14,
+  },
+  helperName: {
+    ...FONTS.body,
+    color: COLORS.textDark,
+    fontSize: 14,
   },
   jobFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 5,
   },
   paymentInfo: {
-    fontSize: 16,
+    ...FONTS.bodyBold,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#4A90E2',
+    color: COLORS.primary,
   },
   dateInfo: {
+    ...FONTS.body,
     fontSize: 12,
-    color: '#999',
+    color: COLORS.textLight,
   },
   loader: {
     flex: 1,
@@ -288,32 +447,35 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: {
-    fontSize: 18,
+    ...FONTS.subheading,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginTop: 10,
-    color: '#666',
+    marginTop: 15,
+    color: COLORS.textDark,
   },
   emptySubText: {
-    fontSize: 14,
-    color: '#999',
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textMedium,
     textAlign: 'center',
-    marginTop: 5,
+    marginTop: 10,
+    marginBottom: 20,
+    paddingHorizontal: 40,
+  },
+  emptyButton: {
+    marginTop: 20,
   },
   fabButton: {
     position: 'absolute',
     bottom: 20,
     right: 20,
-    backgroundColor: '#4A90E2',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    ...SHADOWS.medium,
   },
 });
 

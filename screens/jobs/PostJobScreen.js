@@ -15,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import KeyboardAvoidingWrapper from '../../components/KeyboardAvoidingWrapper';
-
+import Button from '../../components/Button';
+import Input from '../../components/Input';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 
 // Default job types
 const DEFAULT_JOB_TYPES = [
@@ -32,12 +34,13 @@ const PostJobScreen = ({ navigation }) => {
   const [customJobType, setCustomJobType] = useState('');
   const [paymentType, setPaymentType] = useState('fixed'); // 'fixed', 'tip', 'free'
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
   const [jobTypeModalVisible, setJobTypeModalVisible] = useState(false);
 
   const handlePostJob = async () => {
-    if (!title || !description) {
-      Alert.alert('Error', 'Please fill in the job title and description');
+    if (!title || !description || !location) {
+      Alert.alert('Error', 'Please fill in the job title, description, and location');
       return;
     }
 
@@ -66,6 +69,7 @@ const PostJobScreen = ({ navigation }) => {
         title,
         description,
         jobType: finalJobType,
+        location,
         paymentType,
         paymentAmount: paymentType === 'fixed' ? parseFloat(paymentAmount) : 0,
         createdBy: user.uid,
@@ -115,162 +119,181 @@ const PostJobScreen = ({ navigation }) => {
       onPress={() => selectJobType(item)}
     >
       <Text style={styles.jobTypeItemText}>{item}</Text>
+      <Ionicons name="checkmark-circle" size={22} color={selectedJobType === item ? COLORS.primary : 'transparent'} />
     </TouchableOpacity>
   );
 
   return (
     <KeyboardAvoidingWrapper>
-    <ScrollView style={styles.container}>
-      <View style={styles.formContainer}>
-        <Text style={styles.label}>Job Title</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Enter a title for your job"
-        />
-        
-        <Text style={styles.label}>Job Type</Text>
-        <TouchableOpacity
-          style={styles.jobTypeButton}
-          onPress={() => setJobTypeModalVisible(true)}
-        >
-          <Text style={[styles.jobTypeButtonText, (!selectedJobType && !customJobType) && styles.placeholderText]}>
-            {customJobType || selectedJobType || 'Select or enter a job type'}
-          </Text>
-          <Ionicons name="chevron-down" size={20} color="#666" />
-        </TouchableOpacity>
-        
-        <Text style={styles.label}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Describe what you need help with..."
-          multiline
-          numberOfLines={5}
-        />
-        
-        <Text style={styles.label}>Payment Type</Text>
-        <View style={styles.paymentTypeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'fixed' && styles.selectedPaymentType
-            ]}
-            onPress={() => setPaymentType('fixed')}
-          >
-            <Text 
-              style={[
-                styles.paymentTypeText,
-                paymentType === 'fixed' && styles.selectedPaymentTypeText
-              ]}
-            >
-              Fixed Amount
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'tip' && styles.selectedPaymentType
-            ]}
-            onPress={() => setPaymentType('tip')}
-          >
-            <Text 
-              style={[
-                styles.paymentTypeText,
-                paymentType === 'tip' && styles.selectedPaymentTypeText
-              ]}
-            >
-              Tip Only
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'free' && styles.selectedPaymentType
-            ]}
-            onPress={() => setPaymentType('free')}
-          >
-            <Text 
-              style={[
-                styles.paymentTypeText,
-                paymentType === 'free' && styles.selectedPaymentTypeText
-              ]}
-            >
-              No Payment
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {paymentType === 'fixed' && (
-          <>
-            <Text style={styles.label}>Payment Amount ($)</Text>
-            <TextInput
-              style={styles.input}
-              value={paymentAmount}
-              onChangeText={setPaymentAmount}
-              placeholder="Enter amount"
-              keyboardType="numeric"
-            />
-          </>
-        )}
-        
+      <View style={styles.container}>
         <TouchableOpacity 
-          style={[styles.button, loading && styles.disabledButton]} 
-          onPress={handlePostJob}
-          disabled={loading}
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Posting...' : 'Post Job'}
-          </Text>
+          <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
         </TouchableOpacity>
-      </View>
-
-      {/* Job Type Selection Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={jobTypeModalVisible}
-        onRequestClose={() => setJobTypeModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Job Type</Text>
-              <TouchableOpacity onPress={() => setJobTypeModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#666" />
+        
+        <ScrollView style={styles.scrollView}>
+          <View style={styles.formContainer}>
+            <Text style={styles.title}>Post a New Job</Text>
+            
+            <Input
+              label="Job Title"
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Enter a title for your job"
+              required
+            />
+            
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Job Type</Text>
+              <TouchableOpacity
+                style={styles.jobTypeButton}
+                onPress={() => setJobTypeModalVisible(true)}
+              >
+                <Text style={[styles.jobTypeButtonText, (!selectedJobType && !customJobType) && styles.placeholderText]}>
+                  {customJobType || selectedJobType || 'Select or enter a job type'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color="#666" />
               </TouchableOpacity>
             </View>
-
-            <FlatList
-              data={DEFAULT_JOB_TYPES}
-              renderItem={renderJobTypeItem}
-              keyExtractor={(item) => item}
-              style={styles.jobTypeList}
+            
+            <Input
+              label="Location"
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Enter the job location"
+              required
             />
-
-            <View style={styles.customJobTypeContainer}>
-              <Text style={styles.customJobTypeLabel}>Or enter custom job type:</Text>
-              <TextInput
-                style={styles.customJobTypeInput}
-                value={customJobType}
-                onChangeText={setCustomJobType}
-                placeholder="Enter custom job type"
-              />
+            
+            <Input
+              label="Description"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Describe what you need help with..."
+              multiline
+              numberOfLines={5}
+              required
+            />
+            
+            <Text style={styles.label}>Payment Type</Text>
+            <View style={styles.paymentTypeContainer}>
               <TouchableOpacity
-                style={styles.customJobTypeButton}
-                onPress={handleCustomJobType}
+                style={[
+                  styles.paymentTypeButton,
+                  paymentType === 'fixed' && styles.selectedPaymentType
+                ]}
+                onPress={() => setPaymentType('fixed')}
               >
-                <Text style={styles.customJobTypeButtonText}>Use Custom Type</Text>
+                <Text 
+                  style={[
+                    styles.paymentTypeText,
+                    paymentType === 'fixed' && styles.selectedPaymentTypeText
+                  ]}
+                >
+                  Fixed Amount
+                </Text>
               </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.paymentTypeButton,
+                  paymentType === 'tip' && styles.selectedPaymentType
+                ]}
+                onPress={() => setPaymentType('tip')}
+              >
+                <Text 
+                  style={[
+                    styles.paymentTypeText,
+                    paymentType === 'tip' && styles.selectedPaymentTypeText
+                  ]}
+                >
+                  Tip Only
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.paymentTypeButton,
+                  paymentType === 'free' && styles.selectedPaymentType
+                ]}
+                onPress={() => setPaymentType('free')}
+              >
+                <Text 
+                  style={[
+                    styles.paymentTypeText,
+                    paymentType === 'free' && styles.selectedPaymentTypeText
+                  ]}
+                >
+                  No Payment
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {paymentType === 'fixed' && (
+              <Input
+                label="Payment Amount ($)"
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                placeholder="Enter amount"
+                keyboardType="numeric"
+                required
+              />
+            )}
+            
+            <Button 
+              title="Post Job"
+              onPress={handlePostJob}
+              loading={loading}
+              disabled={loading}
+              style={styles.submitButton}
+              size="large"
+            />
+          </View>
+        </ScrollView>
+
+        {/* Job Type Selection Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={jobTypeModalVisible}
+          onRequestClose={() => setJobTypeModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Job Type</Text>
+                <TouchableOpacity onPress={() => setJobTypeModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={DEFAULT_JOB_TYPES}
+                renderItem={renderJobTypeItem}
+                keyExtractor={(item) => item}
+                style={styles.jobTypeList}
+              />
+
+              <View style={styles.customJobTypeContainer}>
+                <Text style={styles.customJobTypeLabel}>Or enter custom job type:</Text>
+                <Input
+                  value={customJobType}
+                  onChangeText={setCustomJobType}
+                  placeholder="Enter custom job type"
+                  style={styles.customJobTypeInput}
+                />
+                <Button
+                  title="Use Custom Type"
+                  onPress={handleCustomJobType}
+                  style={styles.customJobTypeButton}
+                  size="medium"
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </ScrollView>
+        </Modal>
+      </View>
     </KeyboardAvoidingWrapper>
   );
 };
@@ -278,29 +301,44 @@ const PostJobScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.small,
+  },
+  scrollView: {
+    flex: 1,
   },
   formContainer: {
     padding: 20,
+    paddingTop: 60,
+  },
+  title: {
+    ...FONTS.heading,
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: COLORS.textDark,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    marginBottom: 16,
   },
   label: {
+    ...FONTS.subheading,
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: '#333',
-  },
-  input: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 120,
-    textAlignVertical: 'top',
+    marginBottom: 6,
+    color: COLORS.textDark,
   },
   jobTypeButton: {
     flexDirection: 'row',
@@ -309,13 +347,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 10,
+    borderRadius: 30,
     padding: 15,
-    marginBottom: 20,
   },
   jobTypeButtonText: {
+    ...FONTS.body,
     fontSize: 16,
-    color: '#333',
+    color: COLORS.textDark,
   },
   placeholderText: {
     color: '#999',
@@ -323,40 +361,33 @@ const styles = StyleSheet.create({
   paymentTypeContainer: {
     flexDirection: 'row',
     marginBottom: 20,
+    justifyContent: 'space-between',
   },
   paymentTypeButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 5,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ddd',
     backgroundColor: 'white',
+    marginHorizontal: 4,
+    borderRadius: 20,
   },
   paymentTypeText: {
+    ...FONTS.body,
     fontSize: 14,
   },
   selectedPaymentType: {
-    backgroundColor: '#4A90E2',
-    borderColor: '#4A90E2',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   selectedPaymentTypeText: {
     color: 'white',
+    ...FONTS.bodyBold,
   },
-  button: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  disabledButton: {
-    backgroundColor: '#a0c8f0',
+  submitButton: {
+    marginTop: 20,
   },
   // Modal Styles
   modalOverlay: {
@@ -369,13 +400,9 @@ const styles = StyleSheet.create({
     width: '90%',
     maxHeight: '80%',
     backgroundColor: 'white',
-    borderRadius: 10,
+    borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...SHADOWS.medium,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -384,20 +411,27 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   modalTitle: {
-    fontSize: 18,
+    ...FONTS.heading,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: COLORS.textDark,
   },
   jobTypeList: {
     marginBottom: 20,
   },
   jobTypeItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
   jobTypeItemText: {
+    ...FONTS.body,
     fontSize: 16,
+    color: COLORS.textDark,
   },
   customJobTypeContainer: {
     borderTopWidth: 1,
@@ -405,26 +439,17 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
   customJobTypeLabel: {
+    ...FONTS.subheading,
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: COLORS.textDark,
   },
   customJobTypeInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+    marginBottom: 15,
   },
   customJobTypeButton: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  customJobTypeButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    width: '100%',
   },
 });
 

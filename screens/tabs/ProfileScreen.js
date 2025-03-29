@@ -13,13 +13,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { 
   signOut, 
-  updatePassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
+import Button from '../../components/Button';
 
 const ProfileScreen = ({ route, navigation }) => {
   const { userType: initialUserType } = route.params || {};
@@ -90,7 +89,7 @@ const ProfileScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading profile...</Text>
+        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
@@ -99,9 +98,11 @@ const ProfileScreen = ({ route, navigation }) => {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Could not load user profile</Text>
-        <TouchableOpacity onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <Button 
+          title="Sign Out" 
+          onPress={handleSignOut} 
+          style={styles.signOutButton}
+        />
       </View>
     );
   }
@@ -164,62 +165,88 @@ const ProfileScreen = ({ route, navigation }) => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account Information</Text>
         
-        <View style={styles.profileInfo}>
-          <Ionicons name="location" size={20} color="#666" style={styles.infoIcon} />
-          <Text style={styles.infoText}>{userProfile.address}</Text>
-        </View>
-        
-        {userProfile.aboutMe && (
-          <View style={styles.profileInfo}>
-            <Ionicons name="person" size={20} color="#666" style={styles.infoIcon} />
-            <Text style={styles.infoText}>{userProfile.aboutMe}</Text>
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Ionicons name="location" size={22} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoLabel}>Address:</Text>
+            <Text style={styles.infoText}>{userProfile.address}</Text>
           </View>
-        )}
+          
+          {userProfile.aboutMe && (
+            <View style={styles.infoRow}>
+              <Ionicons name="person" size={22} color={COLORS.primary} style={styles.infoIcon} />
+              <Text style={styles.infoLabel}>About Me:</Text>
+              <Text style={styles.infoText}>{userProfile.aboutMe}</Text>
+            </View>
+          )}
+        </View>
       </View>
+      
+      {userType === 'helper' && userProfile.jobTypes && userProfile.jobTypes.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Services Offered</Text>
+          <View style={styles.servicesContainer}>
+            {userProfile.jobTypes.map((jobType, index) => (
+              <View key={index} style={styles.serviceItem}>
+                <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />
+                <Text style={styles.serviceText}>{jobType}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
       
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
         
-        <View style={styles.switchItem}>
-          <Text style={styles.switchLabel}>Helper Mode</Text>
-          <Switch
-            value={userType === 'helper'}
-            onValueChange={handleToggleHelperMode}
-            trackColor={{ false: "#ccc", true: "#4A90E2" }}
-          />
+        <View style={styles.preferencesCard}>
+          <View style={styles.switchItem}>
+            <Text style={styles.switchLabel}>Helper Mode</Text>
+            <Switch
+              value={userType === 'helper'}
+              onValueChange={handleToggleHelperMode}
+              trackColor={{ false: "#ccc", true: COLORS.primary }}
+              thumbColor={userType === 'helper' ? "#fff" : "#f4f3f4"}
+            />
+          </View>
         </View>
       </View>
       
       {userType === 'helper' && (
-        <TouchableOpacity 
-          style={styles.helperSettingsButton}
+        <Button 
+          title="Edit Helper Settings"
+          icon="settings-outline"
           onPress={() => navigation.navigate('HelperSetup', { userId: auth.currentUser.uid })}
-        >
-          <Text style={styles.helperSettingsText}>Edit Helper Settings</Text>
-        </TouchableOpacity>
+          style={styles.helperSettingsButton}
+        />
       )}
       
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account Actions</Text>
         
-       
-<TouchableOpacity style={styles.actionButton} onPress={handleEditProfile}>
-  <Ionicons name="create-outline" size={20} color="#666" style={styles.actionIcon} />
-  <Text style={styles.actionText}>Edit Profile</Text>
-</TouchableOpacity>
-
-<TouchableOpacity style={styles.actionButton} onPress={handleChangePassword}>
-  <Ionicons name="key-outline" size={20} color="#666" style={styles.actionIcon} />
-  <Text style={styles.actionText}>Change Password</Text>
-</TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.signOutButton]}
-          onPress={handleSignOut}
-        >
-          <Ionicons name="log-out-outline" size={20} color="#f44336" style={styles.actionIcon} />
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <Button 
+            title="Edit Profile" 
+            icon="create-outline"
+            onPress={handleEditProfile}
+            style={styles.actionButton}
+          />
+          
+          <Button 
+            title="Change Password" 
+            icon="key-outline"
+            onPress={handleChangePassword}
+            style={styles.actionButton}
+          />
+          
+          <Button 
+            title="Sign Out" 
+            icon="log-out-outline"
+            type="secondary"
+            onPress={handleSignOut}
+            style={styles.signOutButton}
+          />
+        </View>
       </View>
     </ScrollView>
   );
@@ -228,82 +255,141 @@ const ProfileScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: COLORS.background,
   },
   errorText: {
+    ...FONTS.bodyBold,
     fontSize: 18,
-    color: '#f44336',
+    color: COLORS.error,
     marginBottom: 20,
+    textAlign: 'center',
   },
   profileHeader: {
-    backgroundColor: 'white',
-    padding: 20,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 30,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   profileImageContainer: {
     marginBottom: 15,
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: COLORS.white,
   },
   profileImagePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#4A90E2',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: COLORS.white,
   },
   profileImagePlaceholderText: {
-    fontSize: 40,
-    color: 'white',
+    ...FONTS.heading,
+    fontSize: 48,
+    color: COLORS.white,
     fontWeight: 'bold',
   },
   profileName: {
-    fontSize: 22,
+    ...FONTS.heading,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 5,
+    color: COLORS.white,
   },
   profileEmail: {
+    ...FONTS.body,
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   section: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginTop: 15,
+    marginTop: 20,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
+    ...FONTS.subheading,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
+    color: COLORS.textDark,
   },
-  profileInfo: {
+  infoCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    ...SHADOWS.small,
+  },
+  infoRow: {
     flexDirection: 'row',
     marginBottom: 15,
+    alignItems: 'flex-start',
+    paddingVertical: 5,
   },
   infoIcon: {
     marginRight: 10,
+    marginTop: 2,
+  },
+  infoLabel: {
+    ...FONTS.bodyBold,
+    fontSize: 16,
+    color: COLORS.textDark,
+    fontWeight: 'bold',
+    width: 90,
   },
   infoText: {
+    ...FONTS.body,
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: COLORS.textDark,
+  },
+  servicesContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    ...SHADOWS.small,
+  },
+  serviceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingVertical: 5,
+  },
+  serviceText: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
+    marginLeft: 10,
+  },
+  preferencesCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    ...SHADOWS.small,
   },
   switchItem: {
     flexDirection: 'row',
@@ -312,46 +398,22 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   switchLabel: {
+    ...FONTS.body,
     fontSize: 16,
-    color: '#333',
+    color: COLORS.textDark,
   },
   helperSettingsButton: {
-    backgroundColor: '#4A90E2',
-    padding: 15,
-    margin: 15,
-    borderRadius: 10,
-    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 20,
   },
-  helperSettingsText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  buttonContainer: {
+    marginBottom: 30,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  actionIcon: {
-    marginRight: 10,
-  },
-  actionText: {
-    fontSize: 16,
-    color: '#333',
+    marginBottom: 10,
   },
   signOutButton: {
-    borderBottomWidth: 0,
-  },
-  signOutButtonText: {
-    fontSize: 16,
-    color: '#f44336',
-  },
-  signOutText: {
-    color: '#4A90E2',
-    fontSize: 16,
-    fontWeight: 'bold',
+    marginBottom: 10,
   },
 });
 

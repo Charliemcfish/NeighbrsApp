@@ -16,6 +16,11 @@ import EditProfileScreen from './screens/EditProfileScreen';
 
 const Stack = createStackNavigator();
 
+// Default screen options to hide header across all screens
+const screenOptions = {
+  headerShown: false
+};
+
 const Navigation = () => {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(null);
@@ -35,13 +40,12 @@ const Navigation = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator screenOptions={screenOptions}>
         {user ? (
           // User is signed in
           <Stack.Screen 
             name="Home" 
             component={HomeScreen} 
-            options={{ headerShown: false }}
           />
           
         ) : (
@@ -50,7 +54,6 @@ const Navigation = () => {
             <Stack.Screen 
               name="Landing" 
               component={LandingScreen} 
-              options={{ headerShown: false }} 
             />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />

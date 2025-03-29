@@ -14,33 +14,29 @@ const JobsScreen = ({ route }) => {
   const { userType } = route.params || {};
   
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       {userType === 'neighbor' ? (
         <>
           <Stack.Screen 
             name="MyJobs" 
             component={MyJobsScreen} 
-            options={{ title: 'My Jobs' }}
             initialParams={{ userType }}
           />
           <Stack.Screen 
             name="PostJob" 
             component={PostJobScreen} 
-            options={{ title: 'Post a New Job' }}
           />
         </>
       ) : (
         <Stack.Screen 
           name="FindJobs" 
           component={FindJobsScreen} 
-          options={{ title: 'Find Jobs' }}
-          initialParams={{ userType }}
+          initialParams={{ userType, ...route.params?.params }}
         />
       )}
       <Stack.Screen 
         name="JobDetails" 
         component={JobDetailsScreen} 
-        options={{ title: 'Job Details' }}
         initialParams={{ userType }}
       />
     </Stack.Navigator>

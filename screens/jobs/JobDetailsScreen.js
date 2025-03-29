@@ -11,7 +11,8 @@ import {
   ActivityIndicator,
   ToastAndroid,
   Platform,
-  Animated
+  Animated,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -25,6 +26,9 @@ import {
   getDocs 
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
+import Button from '../../components/Button';
+import Input from '../../components/Input';
 
 const JobDetailsScreen = ({ route, navigation }) => {
   const { jobId, userType } = route.params;
@@ -308,7 +312,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
@@ -329,202 +333,238 @@ const JobDetailsScreen = ({ route, navigation }) => {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.jobHeader}>
-        <Text style={styles.jobTitle}>{job.title}</Text>
-        <View style={styles.statusContainer}>
-          <Text style={[styles.statusBadge, styles[`status${job.status}`]]}>
-            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-          </Text>
-        </View>
-      </View>
-      
-      <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Job Type:</Text>
-        <Text style={styles.infoValue}>{job.jobType}</Text>
-      </View>
-      
-      <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Payment:</Text>
-        <Text style={styles.infoValue}>
-          {job.paymentType === 'fixed' ? 
-            `$${job.paymentAmount.toFixed(2)}` : 
-            job.paymentType === 'tip' ? 
-              'Tip Only' : 'No Payment'}
-        </Text>
-      </View>
-      
-      <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Posted By:</Text>
-        <Text style={styles.infoValue}>
-          {creatorProfile ? creatorProfile.fullName : 'Unknown User'}
-        </Text>
-      </View>
-      
-      <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Date Posted:</Text>
-        <Text style={styles.infoValue}>
-          {job.createdAt.toLocaleDateString()}
-        </Text>
-      </View>
-      
-      <View style={styles.descriptionContainer}>
-        <Text style={styles.descriptionLabel}>Description</Text>
-        <Text style={styles.descriptionText}>{job.description}</Text>
-      </View>
-      
-      {/* Helper assigned section */}
-      {job.helperAssigned && (
-        <View style={styles.helperAssignedContainer}>
-          <Text style={styles.sectionTitle}>
-            {isCreator ? 'Helper Assigned:' : 'You are assigned to this job'}
-          </Text>
-          <Text style={styles.helperName}>
-            {helperProfile ? helperProfile.fullName : 'Unknown Helper'}
-          </Text>
-        </View>
-      )}
-      
-      {/* Offers section - only visible to job creator */}
-      {isCreator && job.status === 'open' && job.offers && job.offers.length > 0 && (
-        <View style={styles.offersContainer}>
-          <Text style={styles.sectionTitle}>Offers ({job.offers.length})</Text>
-          
-          {job.offers.map((offer, index) => (
-            <View key={index} style={styles.offerItem}>
-              <View style={styles.offerHeader}>
-                <Text style={styles.offerAmount}>
-                  ${offer.amount.toFixed(2)}
-                </Text>
-                <View style={styles.offerActionButtons}>
-                  {/* Add a chat button */}
-                  <TouchableOpacity 
-                    style={styles.chatOfferButton}
-                    onPress={() => handleOpenChat(offer.userId)}
-                  >
-                    <Ionicons name="chatbubble-outline" size={16} color="white" />
-                    <Text style={styles.chatOfferButtonText}>Chat</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={styles.acceptButton}
-                    onPress={() => handleAcceptOffer(offer)}
-                  >
-                    <Text style={styles.acceptButtonText}>Accept</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {offer.note && (
-                <Text style={styles.offerNote}>{offer.note}</Text>
-              )}
-              
-              <Text style={styles.offerDate}>
-                {new Date(offer.createdAt.seconds * 1000).toLocaleString()}
+      <View style={styles.headerContainer}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+        
+        <View style={styles.creatorContainer}>
+          {creatorProfile?.profileImage ? (
+            <Image
+              source={{ uri: creatorProfile.profileImage }}
+              style={styles.creatorImage}
+            />
+          ) : (
+            <View style={styles.creatorImagePlaceholder}>
+              <Text style={styles.creatorImagePlaceholderText}>
+                {creatorProfile?.fullName ? creatorProfile.fullName.charAt(0).toUpperCase() : '?'}
               </Text>
             </View>
-          ))}
-        </View>
-      )}
-      
-      {/* Make offer section - only visible to helpers for open jobs */}
-      {!isCreator && job.status === 'open' && (
-        <View style={styles.makeOfferContainer}>
-          <Text style={styles.sectionTitle}>
-            {hasOffered ? 'Update Your Offer' : 'Make an Offer'}
+          )}
+          <Text style={styles.creatorName}>
+            {creatorProfile?.fullName || 'Unknown User'}
           </Text>
+        </View>
+      </View>
+      
+      <View style={styles.jobContent}>
+        <View style={styles.jobHeader}>
+          <Text style={styles.jobTitle}>{job.title}</Text>
+          <View style={styles.statusContainer}>
+            <Text style={[styles.statusBadge, styles[`status${job.status}`]]}>
+              {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.jobDetailsContainer}>
+          <View style={styles.jobInfoRow}>
+            <View style={styles.jobInfoItem}>
+              <Ionicons name="briefcase-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.jobInfoText}>{job.jobType}</Text>
+            </View>
+            
+            {job.location && (
+              <View style={styles.jobInfoItem}>
+                <Ionicons name="location-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.jobInfoText}>{job.location}</Text>
+              </View>
+            )}
+          </View>
           
-          {job.paymentType === 'fixed' && (
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Your Offer Amount ($)</Text>
-              <TextInput
-                style={styles.input}
+          <View style={styles.jobInfoRow}>
+            <View style={styles.jobInfoItem}>
+              <Ionicons name="cash-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.jobInfoText}>
+                {job.paymentType === 'fixed' ? 
+                  `$${job.paymentAmount.toFixed(2)}` : 
+                  job.paymentType === 'tip' ? 
+                    'Tip Only' : 'No Payment'}
+              </Text>
+            </View>
+            
+            <View style={styles.jobInfoItem}>
+              <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.jobInfoText}>
+                {job.createdAt.toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.descriptionContainer}>
+          <Text style={styles.descriptionLabel}>Description</Text>
+          <Text style={styles.descriptionText}>{job.description}</Text>
+        </View>
+        
+        {/* Helper assigned section */}
+        {job.helperAssigned && (
+          <View style={styles.helperAssignedContainer}>
+            <Text style={styles.sectionTitle}>
+              {isCreator ? 'Helper Assigned:' : 'You are assigned to this job'}
+            </Text>
+            <View style={styles.helperInfo}>
+              {helperProfile?.profileImage ? (
+                <Image
+                  source={{ uri: helperProfile.profileImage }}
+                  style={styles.helperImage}
+                />
+              ) : (
+                <View style={styles.helperImagePlaceholder}>
+                  <Text style={styles.helperImagePlaceholderText}>
+                    {helperProfile?.fullName ? helperProfile.fullName.charAt(0).toUpperCase() : '?'}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.helperName}>
+                {helperProfile ? helperProfile.fullName : 'Unknown Helper'}
+              </Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Offers section - only visible to job creator */}
+        {isCreator && job.status === 'open' && job.offers && job.offers.length > 0 && (
+          <View style={styles.offersContainer}>
+            <Text style={styles.sectionTitle}>Offers ({job.offers.length})</Text>
+            
+            {job.offers.map((offer, index) => (
+              <View key={index} style={styles.offerItem}>
+                <View style={styles.offerHeader}>
+                  <Text style={styles.offerAmount}>
+                    ${offer.amount.toFixed(2)}
+                  </Text>
+                  <View style={styles.offerActionButtons}>
+                    <Button 
+                      title="Chat"
+                      icon="chatbubble-outline"
+                      size="small"
+                      onPress={() => handleOpenChat(offer.userId)}
+                      style={styles.chatOfferButton}
+                    />
+                    
+                    <Button 
+                      title="Accept"
+                      size="small"
+                      onPress={() => handleAcceptOffer(offer)}
+                      style={styles.acceptButton}
+                    />
+                  </View>
+                </View>
+                
+                {offer.note && (
+                  <Text style={styles.offerNote}>{offer.note}</Text>
+                )}
+                
+                <Text style={styles.offerDate}>
+                  {new Date(offer.createdAt.seconds * 1000).toLocaleString()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        
+        {/* Make offer section - only visible to helpers for open jobs */}
+        {!isCreator && job.status === 'open' && (
+          <View style={styles.makeOfferContainer}>
+            <Text style={styles.sectionTitle}>
+              {hasOffered ? 'Update Your Offer' : 'Make an Offer'}
+            </Text>
+            
+            {job.paymentType === 'fixed' && (
+              <Input
+                label="Your Offer Amount ($)"
                 value={offerAmount}
                 onChangeText={setOfferAmount}
                 placeholder="Enter your price"
                 keyboardType="numeric"
-                autoComplete="off"
-                textContentType="none"
-                importantForAutofill="no"
+                required
               />
-            </View>
-          )}
-          
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Note (optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
+            )}
+            
+            <Input
+              label="Note (optional)"
               value={offerNote}
               onChangeText={setOfferNote}
               placeholder="Add a note about your offer..."
               multiline
               numberOfLines={3}
-              autoComplete="off"
-              textContentType="none"
-              importantForAutofill="no"
+            />
+            
+            <Button 
+              title={hasOffered ? 'Update Offer' : 'Submit Offer'}
+              onPress={handleMakeOffer}
+              style={styles.submitButton}
+              size="large"
             />
           </View>
+        )}
+        
+        {/* Action buttons based on job status and user role */}
+        <View style={styles.actionButtonsContainer}>
+          {job.status === 'accepted' && (isCreator || isHelper) && (
+            <Button 
+              title="Start Job"
+              onPress={handleStartJob}
+              style={styles.actionButton}
+              size="large"
+            />
+          )}
           
-          <TouchableOpacity 
-            style={styles.submitButton}
-            onPress={handleMakeOffer}
-          >
-            <Text style={styles.submitButtonText}>
-              {hasOffered ? 'Update Offer' : 'Submit Offer'}
-            </Text>
-          </TouchableOpacity>
+          {job.status === 'in-progress' && (isCreator || isHelper) && (
+            <Button 
+              title="Mark as Completed"
+              onPress={handleCompleteJob}
+              style={styles.actionButton}
+              size="large"
+            />
+          )}
+          
+          {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress') && isCreator && (
+            <Button 
+              title="Cancel Job"
+              onPress={handleCancelJob}
+              type="secondary"
+              style={styles.cancelButton}
+              size="large"
+            />
+          )}
+          
+          {/* Chat button for accepted/in-progress jobs */}
+          {(job.status === 'accepted' || job.status === 'in-progress') && (isCreator || isHelper) && (
+            <Button 
+              title="Chat"
+              icon="chatbubble-ellipses"
+              onPress={() => handleOpenChat(isCreator ? job.helperAssigned : job.createdBy)}
+              style={styles.chatActionButton}
+              size="large"
+            />
+          )}
+          
+          {/* Chat button for helpers who made an offer */}
+          {!isCreator && job.status === 'open' && hasOffered && (
+            <Button 
+              title="Chat with Job Poster"
+              icon="chatbubble-ellipses"
+              onPress={() => handleOpenChat(job.createdBy)}
+              style={styles.chatActionButton}
+              size="large"
+            />
+          )}
         </View>
-      )}
-      
-      {/* Action buttons based on job status and user role */}
-      <View style={styles.actionButtonsContainer}>
-        {job.status === 'accepted' && (isCreator || isHelper) && (
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={handleStartJob}
-          >
-            <Text style={styles.actionButtonText}>Start Job</Text>
-          </TouchableOpacity>
-        )}
-        
-        {job.status === 'in-progress' && (isCreator || isHelper) && (
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={handleCompleteJob}
-          >
-            <Text style={styles.actionButtonText}>Mark as Completed</Text>
-          </TouchableOpacity>
-        )}
-        
-        {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress') && isCreator && (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.cancelButton]}
-            onPress={handleCancelJob}
-          >
-            <Text style={styles.cancelButtonText}>Cancel Job</Text>
-          </TouchableOpacity>
-        )}
-        
-        {/* Chat button for accepted/in-progress jobs */}
-        {(job.status === 'accepted' || job.status === 'in-progress') && (isCreator || isHelper) && (
-          <TouchableOpacity 
-            style={styles.chatActionButton}
-            onPress={() => handleOpenChat(isCreator ? job.helperAssigned : job.createdBy)}
-          >
-            <Ionicons name="chatbubble-ellipses" size={20} color="white" style={styles.chatButtonIcon} />
-            <Text style={styles.chatButtonText}>Chat</Text>
-          </TouchableOpacity>
-        )}
-        
-        {/* Chat button for helpers who made an offer */}
-        {!isCreator && job.status === 'open' && hasOffered && (
-          <TouchableOpacity 
-            style={styles.chatActionButton}
-            onPress={() => handleOpenChat(job.createdBy)}
-          >
-            <Ionicons name="chatbubble-ellipses" size={20} color="white" style={styles.chatButtonIcon} />
-            <Text style={styles.chatButtonText}>Chat with Job Poster</Text>
-          </TouchableOpacity>
-        )}
       </View>
       
       {Platform.OS === 'ios' && toastVisible && (
@@ -544,37 +584,101 @@ const JobDetailsScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: COLORS.background,
   },
   errorText: {
+    ...FONTS.bodyBold,
     fontSize: 18,
-    color: '#f44336',
+    color: COLORS.error,
     marginBottom: 20,
   },
   backLink: {
-    color: '#4A90E2',
+    ...FONTS.body,
+    color: COLORS.primary,
     fontSize: 16,
   },
-  jobHeader: {
-    backgroundColor: 'white',
+  headerContainer: {
+    backgroundColor: COLORS.primary,
+    paddingTop: 60,
+    paddingBottom: 25,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    position: 'relative',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  creatorContainer: {
+    alignItems: 'center',
+  },
+  creatorImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    marginBottom: 10,
+  },
+  creatorImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    marginBottom: 10,
+  },
+  creatorImagePlaceholderText: {
+    color: COLORS.white,
+    ...FONTS.heading,
+    fontSize: 32,
+  },
+  creatorName: {
+    ...FONTS.subheading,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  jobContent: {
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginTop: -20,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+  },
+  jobHeader: {
+    marginBottom: 15,
   },
   jobTitle: {
+    ...FONTS.heading,
     fontSize: 22,
     fontWeight: 'bold',
+    color: COLORS.textDark,
     marginBottom: 10,
   },
   statusContainer: {
@@ -582,10 +686,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
     fontSize: 14,
+    ...FONTS.bodyBold,
     fontWeight: 'bold',
   },
   statusopen: {
@@ -608,62 +713,92 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffebee',
     color: '#f44336',
   },
-  infoSection: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
+  jobDetailsContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 15,
     padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginBottom: 20,
   },
-  infoLabel: {
-    width: 110,
-    fontSize: 16,
-    color: '#666',
+  jobInfoRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
   },
-  infoValue: {
+  jobInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 20,
     flex: 1,
+  },
+  jobInfoText: {
+    ...FONTS.body,
     fontSize: 16,
-    fontWeight: '500',
+    color: COLORS.textDark,
+    marginLeft: 8,
   },
   descriptionContainer: {
-    backgroundColor: 'white',
-    padding: 15,
-    marginTop: 15,
-    marginBottom: 15,
+    marginBottom: 20,
   },
   descriptionLabel: {
+    ...FONTS.subheading,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: COLORS.textDark,
   },
   descriptionText: {
+    ...FONTS.body,
     fontSize: 16,
     lineHeight: 24,
-    color: '#333',
+    color: COLORS.textDark,
   },
   helperAssignedContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.background,
+    borderRadius: 15,
     padding: 15,
-    marginBottom: 15,
+    marginBottom: 20,
+  },
+  helperInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  helperImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  helperImagePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  helperImagePlaceholderText: {
+    color: COLORS.white,
+    ...FONTS.bodyBold,
+    fontSize: 18,
+  },
+  helperName: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
   },
   sectionTitle: {
+    ...FONTS.subheading,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
-  },
-  helperName: {
-    fontSize: 16,
-    color: '#333',
+    color: COLORS.textDark,
   },
   offersContainer: {
-    backgroundColor: 'white',
-    padding: 15,
-    marginBottom: 15,
+    marginBottom: 20,
   },
   offerItem: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
+    backgroundColor: COLORS.background,
+    borderRadius: 15,
     padding: 15,
     marginBottom: 10,
   },
@@ -674,122 +809,51 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   offerAmount: {
-    fontSize: 18,
+    ...FONTS.subheading,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#4A90E2',
+    color: COLORS.primary,
   },
   offerActionButtons: {
     flexDirection: 'row',
   },
   chatOfferButton: {
-    backgroundColor: '#4A90E2',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  chatOfferButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    marginLeft: 5,
+    marginRight: 8,
   },
   acceptButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 5,
-    paddingHorizontal: 15,
-    borderRadius: 15,
-  },
-  acceptButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    backgroundColor: COLORS.success,
   },
   offerNote: {
+    ...FONTS.body,
     fontSize: 16,
     marginBottom: 10,
-    color: '#333',
+    color: COLORS.textDark,
   },
   offerDate: {
+    ...FONTS.body,
     fontSize: 12,
-    color: '#999',
+    color: COLORS.textLight,
   },
   makeOfferContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.background,
+    borderRadius: 15,
     padding: 15,
-    marginBottom: 15,
-  },
-  formGroup: {
-    marginBottom: 15,
-  },
-  formLabel: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#333',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
+    marginBottom: 20,
   },
   submitButton: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  actionButtonsContainer: {
-    padding: 15,
-    backgroundColor: 'white',
-    marginBottom: 15,
-  },
-  actionButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    backgroundColor: '#f44336',
-  },
-  cancelButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  chatActionButton: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 15,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 10,
   },
-  chatButtonIcon: {
-    marginRight: 10,
+  actionButtonsContainer: {
+    marginBottom: 30,
   },
-  chatButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  actionButton: {
+    marginBottom: 10,
+  },
+  cancelButton: {
+    marginBottom: 10,
+  },
+  chatActionButton: {
+    backgroundColor: COLORS.info,
   },
   toast: {
     position: 'absolute',
@@ -797,12 +861,13 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 5,
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
   },
   toastText: {
-    color: 'white',
+    ...FONTS.body,
+    color: COLORS.white,
     fontSize: 16,
   },
 });

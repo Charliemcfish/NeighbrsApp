@@ -7,14 +7,9 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Image, 
-  TextInput,
+  ImageBackground,
   Alert,
   Switch,
-  KeyboardAvoidingView,
-
-  Platform,
-  TouchableWithoutFeedback,
-  Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,9 +17,9 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
-
-// Make sure to install this:
-// expo install expo-image-picker
+import Input from '../components/Input';
+import Button from '../components/Button';
+import { COLORS, FONTS } from '../styles/theme';
 
 const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -38,209 +33,208 @@ const SignUpScreen = ({ navigation }) => {
   const [wantToBeHelper, setWantToBeHelper] = useState(false);
   const [loading, setLoading] = useState(false);
 
- // screens/SignUpScreen.js
-// Update the pickImage function
-
-// screens/SignUpScreen.js
-// Update the pickImage function
-
-const pickImage = async () => {
-  // Request permissions
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  
-  if (status !== 'granted') {
-    Alert.alert('Permission Needed', 'We need camera roll permissions to upload a profile picture');
-    return;
-  }
-
-  try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images', // Changed to 'images' (plural)
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
-    }
-  } catch (error) {
-    console.log('ImagePicker Error: ', error);
-  }
-};
-
-  // In your SignUpScreen.js file
-const handleSignUp = async () => {
-  // Validate inputs
-  if (!email || !password || !confirmPassword || !fullName || !address) {
-    Alert.alert('Error', 'Please fill in all required fields');
-    return;
-  }
-
-  if (password !== confirmPassword) {
-    Alert.alert('Error', 'Passwords do not match');
-    return;
-  }
-
-  if (!agreeToTerms) {
-    Alert.alert('Error', 'You must agree to the terms and conditions');
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    // Create user in Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Prepare user data - only include profileImage if it exists
-    const userData = {
-      fullName,
-      email,
-      address,
-      aboutMe: aboutMe || "", // Use empty string instead of undefined
-      isHelper: wantToBeHelper,
-      createdAt: new Date(),
-    };
-
-    // Only add profileImage if it's not null
-    if (profileImage) {
-      userData.profileImage = profileImage;
+  const pickImage = async () => {
+    // Request permissions
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission Needed', 'We need camera roll permissions to upload a profile picture');
+      return;
     }
 
-    // Store user data in Firestore
-    await setDoc(doc(db, 'users', user.uid), userData);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images', // Changed to 'images' (plural)
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
 
-    // If user wants to be a helper, they'll need to complete more info
-    if (wantToBeHelper) {
-      navigation.navigate('HelperSetup', { userId: user.uid });
-    } else {
-      navigation.navigate('Home');
+      if (!result.canceled) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.log('ImagePicker Error: ', error);
     }
-  } catch (error) {
-    Alert.alert('Error', error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const handleSignUp = async () => {
+    // Validate inputs
+    if (!email || !password || !confirmPassword || !fullName || !address) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (!agreeToTerms) {
+      Alert.alert('Error', 'You must agree to the terms and conditions');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Prepare user data - only include profileImage if it exists
+      const userData = {
+        fullName,
+        email,
+        address,
+        aboutMe: aboutMe || "", // Use empty string instead of undefined
+        isHelper: wantToBeHelper,
+        createdAt: new Date(),
+      };
+
+      // Only add profileImage if it's not null
+      if (profileImage) {
+        userData.profileImage = profileImage;
+      }
+
+      // Store user data in Firestore
+      await setDoc(doc(db, 'users', user.uid), userData);
+
+      // If user wants to be a helper, they'll need to complete more info
+      if (wantToBeHelper) {
+        navigation.navigate('HelperSetup', { userId: user.uid });
+      } else {
+        navigation.navigate('Home');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingWrapper>
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Create an Account</Text>
-        
-        {/* Profile Image Picker */}
-        <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
-          {profileImage ? (
-            <Image source={{ uri: profileImage }} style={styles.profileImage} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+      <SafeAreaView style={styles.container}>
+        <ImageBackground
+          source={require('../assets/logo.png')}
+          style={styles.backgroundImage}
+          imageStyle={styles.backgroundImageStyle}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.title}>Create an Account</Text>
+            
+            {/* Profile Image Picker */}
+            <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            {/* Form Fields */}
+            <View style={styles.formContainer}>
+              <Input
+                label="Full Name"
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="Enter your full name"
+                required
+              />
+              
+              <Input
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                required
+              />
+              
+              <Input
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Create a password"
+                secureTextEntry
+                required
+              />
+              
+              <Input
+                label="Confirm Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Confirm your password"
+                secureTextEntry
+                required
+              />
+              
+              <Input
+                label="Address"
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Enter your address"
+                required
+              />
+              
+              <Input
+                label="About Me"
+                value={aboutMe}
+                onChangeText={setAboutMe}
+                placeholder="Tell your neighbors a bit about yourself"
+                multiline
+                numberOfLines={4}
+              />
+              
+              {/* Helper Option */}
+              <View style={styles.switchContainer}>
+                <Text style={styles.switchLabel}>I want to offer help to neighbors</Text>
+                <Switch
+                  value={wantToBeHelper}
+                  onValueChange={setWantToBeHelper}
+                  trackColor={{ false: "#ccc", true: COLORS.primary }}
+                  thumbColor={wantToBeHelper ? "#fff" : "#f4f3f4"}
+                />
+              </View>
+              
+              {/* Terms and Conditions */}
+              <View style={styles.switchContainer}>
+                <Text style={styles.switchLabel}>I agree to the Terms and Conditions</Text>
+                <Switch
+                  value={agreeToTerms}
+                  onValueChange={setAgreeToTerms}
+                  trackColor={{ false: "#ccc", true: COLORS.primary }}
+                  thumbColor={agreeToTerms ? "#fff" : "#f4f3f4"}
+                />
+              </View>
+              
+              {/* Sign Up Button */}
+              <Button 
+                title="Sign Up"
+                onPress={handleSignUp}
+                loading={loading}
+                disabled={loading}
+                style={styles.button}
+                size="large"
+              />
+              
+              {/* Login Link */}
+              <TouchableOpacity 
+                style={styles.linkContainer} 
+                onPress={() => navigation.navigate('Login')}
+              >
+                <Text style={styles.linkText}>
+                  Already have an account? <Text style={styles.link}>Log In</Text>
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </TouchableOpacity>
-        
-        {/* Form Fields */}
-        <View style={styles.formContainer}>
-          <Text style={styles.label}>Full Name*</Text>
-          <TextInput
-            style={styles.input}
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Enter your full name"
-          />
-          
-          <Text style={styles.label}>Email*</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Enter your email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-          
-          <Text style={styles.label}>Password*</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Create a password"
-            secureTextEntry
-          />
-          
-          <Text style={styles.label}>Confirm Password*</Text>
-          <TextInput
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm your password"
-            secureTextEntry
-          />
-          
-          <Text style={styles.label}>Address*</Text>
-          <TextInput
-            style={styles.input}
-            value={address}
-            onChangeText={setAddress}
-            placeholder="Enter your address"
-          />
-          
-          <Text style={styles.label}>About Me</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={aboutMe}
-            onChangeText={setAboutMe}
-            placeholder="Tell your neighbors a bit about yourself"
-            multiline
-            numberOfLines={4}
-          />
-          
-          {/* Helper Option */}
-          <View style={styles.switchContainer}>
-            <Text style={styles.switchLabel}>I want to offer help to neighbors</Text>
-            <Switch
-              value={wantToBeHelper}
-              onValueChange={setWantToBeHelper}
-              trackColor={{ false: '#ccc', true: '#4A90E2' }}
-            />
-          </View>
-          
-          {/* Terms and Conditions */}
-          <View style={styles.switchContainer}>
-            <Text style={styles.switchLabel}>I agree to the Terms and Conditions</Text>
-            <Switch
-              value={agreeToTerms}
-              onValueChange={setAgreeToTerms}
-              trackColor={{ false: '#ccc', true: '#4A90E2' }}
-            />
-          </View>
-          
-          {/* Sign Up Button */}
-          <TouchableOpacity 
-            style={[styles.button, loading && styles.disabledButton]} 
-            onPress={handleSignUp}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Creating Account...' : 'Sign Up'}
-            </Text>
-          </TouchableOpacity>
-          
-          {/* Login Link */}
-          <TouchableOpacity 
-            style={styles.linkContainer} 
-            onPress={() => navigation.navigate('Login')}
-          >
-            <Text style={styles.linkText}>
-              Already have an account? <Text style={styles.link}>Log In</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          </ScrollView>
+        </ImageBackground>
+      </SafeAreaView>
     </KeyboardAvoidingWrapper>
   );
 };
@@ -248,16 +242,27 @@ const handleSignUp = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.primary,
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  backgroundImageStyle: {
+    opacity: 0.1,
+    resizeMode: 'cover',
   },
   scrollContent: {
     padding: 20,
   },
   title: {
-    fontSize: 28,
+    ...FONTS.heading,
+    fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 30,
     textAlign: 'center',
+    color: COLORS.white,
   },
   imagePickerContainer: {
     alignSelf: 'center',
@@ -267,37 +272,31 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
+    borderWidth: 3,
+    borderColor: COLORS.white,
   },
   imagePlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#e1e1e1',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    borderStyle: 'dashed',
   },
   imagePlaceholderText: {
-    color: '#555',
+    color: COLORS.white,
+    ...FONTS.body,
+    fontSize: 16,
   },
   formContainer: {
     width: '100%',
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 5,
-    color: '#333',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 20,
+    ...FONTS.body,
   },
   switchContainer: {
     flexDirection: 'row',
@@ -308,21 +307,12 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     flex: 1,
+    ...FONTS.body,
+    color: COLORS.textDark,
   },
   button: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
+    width: '100%',
     marginTop: 10,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  disabledButton: {
-    backgroundColor: '#a0c8f0',
   },
   linkContainer: {
     marginTop: 20,
@@ -330,11 +320,13 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 16,
-    color: '#333',
+    color: COLORS.textDark,
+    ...FONTS.body,
   },
   link: {
-    color: '#4A90E2',
+    color: COLORS.primary,
     fontWeight: 'bold',
+    ...FONTS.bodyBold,
   },
 });
 

@@ -2,38 +2,55 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Button from '../components/Button';
+import { COLORS, FONTS } from '../styles/theme';
 
 const LandingScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Image
-          source={require('../assets/logo.png')} // You'll need to add a logo image to your assets folder
+          source={require('../assets/logo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
 
-<Text style={styles.title}>
-          Welcome to Neighbrs
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.welcomeText}>
+            Welcome to
+          </Text>
+          <Text style={styles.titleText}>
+            Neighbrs
+          </Text>
+        </View>
         
         <Text style={styles.slogan}>
           When neighbors help each other, everyone wins
         </Text>
         
         <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.button} 
+          <Button 
+            title="Sign Up" 
             onPress={() => navigation.navigate('SignUp')}
-          >
-            <Text style={styles.buttonText}>Get Started</Text>
-          </TouchableOpacity>
+            size="large"
+            style={styles.button}
+          />
+          
+          <Button 
+            title="Login" 
+            onPress={() => navigation.navigate('Login')}
+            type="secondary"
+            size="large"
+            style={styles.button}
+          />
           
           <TouchableOpacity 
-            style={styles.secondaryButton} 
-            onPress={() => navigation.navigate('Login')}
+            style={styles.learnMoreContainer}
+            onPress={() => {/* Handle Learn More */}}
           >
-            <Text style={styles.secondaryButtonText}>I already have an account</Text>
+            <Text style={styles.learnMoreText}>
+              Learn how to use Neighbrs
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -44,7 +61,7 @@ const LandingScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.background,
   },
   content: {
     flex: 1,
@@ -53,46 +70,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   logo: {
-    width: 450,
-    height: 450
-    
+    width: 300,
+    height: 300,
+    marginTop: -50,
   },
-
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 50,
+  titleContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
   },
-
-  slogan: {
+  welcomeText: {
+    ...FONTS.subheading,
     fontSize: 24,
-    fontWeight: 'bold',
+    color: COLORS.textDark,
     textAlign: 'center',
-    color: '#333',
+  },
+  titleText: {
+    ...FONTS.heading,
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    textAlign: 'center',
+  },
+  slogan: {
+    ...FONTS.subheading,
+    fontSize: 22,
+    textAlign: 'center',
+    color: COLORS.textDark,
     marginBottom: 50,
+    lineHeight: 30,
   },
   buttonContainer: {
     width: '100%',
+    alignItems: 'center',
   },
   button: {
-    backgroundColor: '#4A90E2', // You can change this to match your brand color
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
+    width: '100%',
     marginBottom: 15,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  learnMoreContainer: {
+    marginTop: 20,
   },
-  secondaryButton: {
-    padding: 15,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#4A90E2',
-    fontSize: 16,
+  learnMoreText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textDark,
+    textDecorationLine: 'underline',
   },
 });
 

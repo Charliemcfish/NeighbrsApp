@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#AEE0FF"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#AEE0FF"
       }
     },
     "web": {
@@ -26,6 +26,26 @@
     },
     "plugins": [
       "expo-font"
+    ],
+    "fonts": [
+      {
+        "asset": "./assets/fonts/Barlow-Regular.ttf"
+      },
+      {
+        "asset": "./assets/fonts/Barlow-Medium.ttf"
+      },
+      {
+        "asset": "./assets/fonts/Barlow-Bold.ttf"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Regular.ttf"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Medium.ttf"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Bold.ttf"
+      }
     ]
   }
 }
