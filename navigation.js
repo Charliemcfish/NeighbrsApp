@@ -13,6 +13,8 @@ import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import HelperSetupScreen from './screens/HelperSetupScreen';
 import HomeScreen from './screens/HomeScreen';
 import EditProfileScreen from './screens/EditProfileScreen';  
+import BrowseHelpersScreen from './screens/helpers/BrowseHelpersScreen';
+import HelperProfileScreen from './screens/helpers/HelperProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -62,6 +64,9 @@ const Navigation = () => {
         )}
         <Stack.Screen name="HelperSetup" component={HelperSetupScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+        <Stack.Screen name="BrowseHelpers" component={BrowseHelpersScreen} />
+<Stack.Screen name="HelperProfile" component={HelperProfileScreen} />
+        
       </Stack.Navigator>
     </NavigationContainer>
   );

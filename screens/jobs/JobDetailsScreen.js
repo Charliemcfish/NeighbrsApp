@@ -42,6 +42,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [helperProfile, setHelperProfile] = useState(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastOpacity] = useState(new Animated.Value(0));
+  const [offersWithHelpers, setOffersWithHelpers] = useState([]);
 
   useEffect(() => {
     loadJobDetails();
@@ -91,6 +92,65 @@ const JobDetailsScreen = ({ route, navigation }) => {
         if (helperDoc.exists()) {
           setHelperProfile(helperDoc.data());
         }
+      }
+
+      // Get helper profiles for all offers
+      if (jobData.offers && jobData.offers.length > 0) {
+        const helpersInfo = await Promise.all(
+          jobData.offers.map(async (offer) => {
+            try {
+              const helperDoc = await getDoc(doc(db, 'users', offer.userId));
+              if (helperDoc.exists()) {
+                const helperData = helperDoc.data();
+                
+                // Get helper's rating and completed jobs count
+                let rating = 0;
+                let completedJobs = 0;
+                
+                try {
+                  const completedJobsQuery = query(
+                    collection(db, 'jobs'),
+                    where('helperAssigned', '==', offer.userId),
+                    where('status', '==', 'completed')
+                  );
+                  
+                  const jobsSnapshot = await getDocs(completedJobsQuery);
+                  let totalRating = 0;
+                  let ratingCount = 0;
+                  
+                  jobsSnapshot.forEach((doc) => {
+                    completedJobs++;
+                    const job = doc.data();
+                    if (job.helperRating) {
+                      totalRating += job.helperRating;
+                      ratingCount++;
+                    }
+                  });
+                  
+                  if (ratingCount > 0) {
+                    rating = totalRating / ratingCount;
+                  }
+                } catch (error) {
+                  console.error('Error getting helper rating:', error);
+                }
+                
+                return {
+                  userId: offer.userId,
+                  fullName: helperData.fullName,
+                  profileImage: helperData.profileImage,
+                  rating,
+                  completedJobs
+                };
+              }
+              return { userId: offer.userId };
+            } catch (error) {
+              console.error('Error getting helper info:', error);
+              return { userId: offer.userId };
+            }
+          })
+        );
+        
+        setOffersWithHelpers(helpersInfo);
       }
 
       // Check if current user has already made an offer
@@ -433,6 +493,14 @@ const JobDetailsScreen = ({ route, navigation }) => {
                 {helperProfile ? helperProfile.fullName : 'Unknown Helper'}
               </Text>
             </View>
+            {isCreator && (
+              <Button 
+                title="View Helper Profile"
+                size="small"
+                onPress={() => navigation.navigate('HelperProfile', { helperId: job.helperAssigned })}
+                style={styles.viewHelperButton}
+              />
+            )}
           </View>
         )}
         
@@ -441,39 +509,81 @@ const JobDetailsScreen = ({ route, navigation }) => {
           <View style={styles.offersContainer}>
             <Text style={styles.sectionTitle}>Offers ({job.offers.length})</Text>
             
-            {job.offers.map((offer, index) => (
-              <View key={index} style={styles.offerItem}>
-                <View style={styles.offerHeader}>
-                  <Text style={styles.offerAmount}>
-                    ${offer.amount.toFixed(2)}
-                  </Text>
-                  <View style={styles.offerActionButtons}>
-                    <Button 
-                      title="Chat"
-                      icon="chatbubble-outline"
-                      size="small"
-                      onPress={() => handleOpenChat(offer.userId)}
-                      style={styles.chatOfferButton}
-                    />
-                    
-                    <Button 
-                      title="Accept"
-                      size="small"
-                      onPress={() => handleAcceptOffer(offer)}
-                      style={styles.acceptButton}
-                    />
+            {job.offers.map((offer, index) => {
+              // Get the helper profile from offersWithHelpers
+              const helper = offersWithHelpers.find(h => h.userId === offer.userId);
+              
+              return (
+                <View key={index} style={styles.offerItem}>
+                  {/* Helper info */}
+                  {helper && (
+                    <View style={styles.offerHelperContainer}>
+                      {helper.profileImage ? (
+                        <Image 
+                          source={{ uri: helper.profileImage }} 
+                          style={styles.offerHelperImage} 
+                        />
+                      ) : (
+                        <View style={styles.offerHelperImagePlaceholder}>
+                          <Text style={styles.offerHelperImageText}>
+                            {helper.fullName ? helper.fullName.charAt(0).toUpperCase() : '?'}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.offerHelperInfo}>
+                        <Text style={styles.offerHelperName}>
+                          {helper.fullName || 'Unknown Helper'}
+                        </Text>
+                        {helper.rating > 0 && (
+                          <View style={styles.offerHelperRating}>
+                            <Ionicons name="star" size={14} color="#FFD700" />
+                            <Text style={styles.offerHelperRatingText}>
+                              {helper.rating.toFixed(1)} ({helper.completedJobs} jobs)
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Button
+                        title="View Profile"
+                        size="small"
+                        onPress={() => navigation.navigate('HelperProfile', { helperId: offer.userId })}
+                        style={styles.viewProfileButton}
+                      />
+                    </View>
+                  )}
+                  
+                  <View style={styles.offerHeader}>
+                    <Text style={styles.offerAmount}>
+                      ${offer.amount.toFixed(2)}
+                    </Text>
+                    <View style={styles.offerActionButtons}>
+                      <Button 
+                        title="Chat"
+                        icon="chatbubble-outline"
+                        size="small"
+                        onPress={() => handleOpenChat(offer.userId)}
+                        style={styles.chatOfferButton}
+                      />
+                      
+                      <Button 
+                        title="Accept"
+                        size="small"
+                        onPress={() => handleAcceptOffer(offer)}
+                        style={styles.acceptButton}
+                      />
+                    </View>
                   </View>
+                  
+                  {offer.note && (
+                    <Text style={styles.offerNote}>{offer.note}</Text>
+                  )}
+                  
+                  <Text style={styles.offerDate}>
+                    {new Date(offer.createdAt.seconds * 1000).toLocaleString()}
+                  </Text>
                 </View>
-                
-                {offer.note && (
-                  <Text style={styles.offerNote}>{offer.note}</Text>
-                )}
-                
-                <Text style={styles.offerDate}>
-                  {new Date(offer.createdAt.seconds * 1000).toLocaleString()}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
         
@@ -790,6 +900,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
   },
+  viewHelperButton: {
+    marginTop: 15,
+    alignSelf: 'flex-end',
+  },
   sectionTitle: {
     ...FONTS.subheading,
     fontSize: 18,
@@ -805,6 +919,57 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     marginBottom: 10,
+  },
+  offerHelperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eaeaea',
+  },
+  offerHelperImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 10,
+  },
+  offerHelperImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  offerHelperImageText: {
+    color: COLORS.white,
+    ...FONTS.bodyBold,
+    fontSize: 20,
+  },
+  offerHelperInfo: {
+    flex: 1,
+  },
+  offerHelperName: {
+    ...FONTS.subheading,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 5,
+  },
+  offerHelperRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  offerHelperRatingText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    marginLeft: 5,
+  },
+  viewProfileButton: {
+    marginLeft: 10,
   },
   offerHeader: {
     flexDirection: 'row',

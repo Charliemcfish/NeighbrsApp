@@ -43,6 +43,8 @@ const DashboardScreen = ({ route, navigation }) => {
       });
     } else if (screen === 'Messages') {
       navigation.navigate('Messages');
+    } else if (screen === 'BrowseHelpers') {
+      navigation.navigate('BrowseHelpers');
     }
   };
   
@@ -86,12 +88,12 @@ const DashboardScreen = ({ route, navigation }) => {
             />
             
             <Button 
-              title="Find A Helper" 
-              onPress={() => handleNavigate('FindJobs')}
-              style={styles.actionButton}
-              size="large"
-              icon="search"
-            />
+  title="Find A Helper" 
+  onPress={() => handleNavigate('BrowseHelpers')}
+  style={styles.actionButton}
+  size="large"
+  icon="people"
+/>
           </>
         ) : (
           // Actions for helpers
