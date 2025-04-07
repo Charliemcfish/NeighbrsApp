@@ -76,21 +76,27 @@ const HomeScreen = () => {
           setUnreadMessages(unreadCount);
         });
         
-        return () => {
-          console.log('Cleaning up unread message listener');
-          unsubscribe();
-        };
+        return () => unsubscribe();
       } catch (error) {
         console.error('Error checking unread messages:', error);
+        return () => {}; // Return empty function as fallback
       }
     };
     
     console.log('Setting up unread message listener');
-    const unsubscribeFromMessages = checkUnreadMessages();
+    const messageListener = checkUnreadMessages();
     
     return () => {
-      if (unsubscribeFromMessages) {
-        unsubscribeFromMessages();
+      // Check if messageListener is a function before calling it
+      if (messageListener && typeof messageListener.then === 'function') {
+        // Handle the Promise correctly
+        messageListener.then(unsubscribeFunc => {
+          if (unsubscribeFunc && typeof unsubscribeFunc === 'function') {
+            unsubscribeFunc();
+          }
+        }).catch(error => {
+          console.error('Error with message listener cleanup:', error);
+        });
       }
     };
   }, []);

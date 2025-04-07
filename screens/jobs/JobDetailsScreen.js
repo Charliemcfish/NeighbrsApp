@@ -253,14 +253,20 @@ const JobDetailsScreen = ({ route, navigation }) => {
         status: 'in-progress',
         startedAt: new Date(),
       });
-
+  
       Alert.alert(
-        'Success',
-        'Job marked as in progress!',
+        'Job started!',
+        'You have successfully started this job.',
         [
           {
             text: 'OK',
-            onPress: () => loadJobDetails()
+            onPress: () => {
+              // Navigate back to dashboard after confirming
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              });
+            }
           }
         ]
       );

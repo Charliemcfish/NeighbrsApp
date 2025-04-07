@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 import Navigation from './navigation';
 import { loadFonts } from './utils/fontLoader';  // Correct relative path
 
@@ -10,12 +12,26 @@ SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
+  const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
+
+  // Handle user state changes
+  const onAuthStateChange = (user) => {
+    setUser(user);
+    if (initializing) setInitializing(false);
+  };
 
   useEffect(() => {
     async function prepare() {
       try {
         // Load fonts
         await loadFonts();
+        
+        // Set up authentication listener
+        const unsubscribe = onAuthStateChanged(auth, onAuthStateChange);
+        
+        // Return cleanup function
+        return unsubscribe;
       } catch (e) {
         console.warn(e);
       } finally {
@@ -40,7 +56,7 @@ export default function App() {
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <Navigation />
+      <Navigation initialUser={user} />
       <StatusBar style="auto" />
     </View>
   );

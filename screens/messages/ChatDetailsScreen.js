@@ -412,9 +412,126 @@ const ChatDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  // Add these functions to handle job offers
+  const handleAcceptJobOffer = (jobOfferData, messageId) => {
+    Alert.alert(
+      'Accept Job Offer',
+      'Are you sure you want to accept this job offer? You will be assigned to this job and it will appear in your current jobs.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            try {
+              const user = auth.currentUser;
+              if (!user) return;
+
+              // Create an actual job from the job offer
+              const jobData = {
+                ...jobOfferData,
+                status: 'accepted',
+                helperAssigned: user.uid,
+                acceptedAt: new Date(),
+                directRequestedHelper: user.uid
+              };
+
+              // Add the job to the jobs collection
+              const jobRef = await addDoc(collection(db, 'jobs'), jobData);
+              
+              // Update the message to show it was accepted
+              await updateDoc(doc(db, 'chats', currentChatId, 'messages', messageId), {
+                'jobOfferData.status': 'accepted',
+                'jobOfferData.jobId': jobRef.id
+              });
+
+              // Add a confirmation message
+              await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
+                text: `I have accepted your job offer. The job "${jobOfferData.title}" is now in my current jobs.`,
+                senderId: user.uid,
+                createdAt: new Date(),
+              });
+
+              // Alert success
+              Alert.alert(
+                'Job Accepted',
+                'You have successfully accepted this job offer. You can find it in your current jobs.',
+                [
+                  {
+                    text: 'OK'
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Error accepting job offer:', error);
+              Alert.alert('Error', 'Failed to accept job offer. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeclineJobOffer = (jobOfferData, messageId) => {
+    Alert.alert(
+      'Decline Job Offer',
+      'Are you sure you want to decline this job offer? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Decline',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const user = auth.currentUser;
+              if (!user) return;
+              
+              // Update the message to show it was declined
+              await updateDoc(doc(db, 'chats', currentChatId, 'messages', messageId), {
+                'jobOfferData.status': 'declined'
+              });
+
+              // Add a decline message
+              await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
+                text: `I have declined your job offer for "${jobOfferData.title}".`,
+                senderId: user.uid,
+                createdAt: new Date(),
+              });
+
+              // Alert success
+              Alert.alert(
+                'Job Declined',
+                'You have declined this job offer.',
+                [
+                  {
+                    text: 'OK'
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Error declining job offer:', error);
+              Alert.alert('Error', 'Failed to decline job offer. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Modified renderMessage function to handle job offers
   const renderMessage = ({ item }) => {
     const isMyMessage = item.senderId === user.uid;
     const messageUser = isMyMessage ? currentUser : otherUser;
+    
+    // Check if this is a job offer message
+    const isJobOffer = item.isJobOffer;
+    const jobOfferData = item.jobOfferData;
+    const jobOfferStatus = jobOfferData?.status || 'pending';
     
     return (
       <View style={[
@@ -439,17 +556,59 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         )}
         
         <View style={styles.messageContent}>
-          <View style={[
-            styles.messageBubble,
-            isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
-          ]}>
-            <Text style={[
-              styles.messageText, 
-              isMyMessage ? styles.myMessageText : styles.otherMessageText
+          {isJobOffer ? (
+            // Job offer message
+            <View style={[
+              styles.jobOfferBubble,
+              isMyMessage ? styles.myJobOfferBubble : styles.otherJobOfferBubble
             ]}>
-              {item.text}
-            </Text>
-          </View>
+              <Text style={styles.jobOfferText}>{item.text}</Text>
+              
+              {/* Only show buttons for pending job offers sent to me */}
+              {!isMyMessage && jobOfferStatus === 'pending' && (
+                <View style={styles.jobOfferButtons}>
+                  <TouchableOpacity
+                    style={styles.acceptButton}
+                    onPress={() => handleAcceptJobOffer(jobOfferData, item.id)}
+                  >
+                    <Text style={styles.acceptButtonText}>Accept</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.declineButton}
+                    onPress={() => handleDeclineJobOffer(jobOfferData, item.id)}
+                  >
+                    <Text style={styles.declineButtonText}>Decline</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Status indicator for job offers */}
+              {jobOfferStatus !== 'pending' && (
+                <View style={styles.jobOfferStatusContainer}>
+                  <Text style={[
+                    styles.jobOfferStatus,
+                    jobOfferStatus === 'accepted' ? styles.acceptedStatus : styles.declinedStatus
+                  ]}>
+                    {jobOfferStatus.toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            // Regular message
+            <View style={[
+              styles.messageBubble,
+              isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
+            ]}>
+              <Text style={[
+                styles.messageText, 
+                isMyMessage ? styles.myMessageText : styles.otherMessageText
+              ]}>
+                {item.text}
+              </Text>
+            </View>
+          )}
           <Text style={styles.messageTime}>
             {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
@@ -733,6 +892,89 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 25,
     ...SHADOWS.small,
+  },
+  // Job offer specific styles
+  jobOfferBubble: {
+    padding: 12,
+    borderRadius: 20,
+    maxWidth: '100%',
+    marginBottom: 5,
+    ...SHADOWS.small,
+  },
+  myJobOfferBubble: {
+    backgroundColor: '#e8f4ff', // Light blue for job offers
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderBottomRightRadius: 5,
+  },
+  otherJobOfferBubble: {
+    backgroundColor: '#f0f7ff', // Slightly lighter blue for received job offers
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderBottomLeftRadius: 5,
+  },
+  jobOfferText: {
+    fontSize: 16,
+    ...FONTS.body,
+    lineHeight: 22,
+    color: COLORS.textDark,
+  },
+  jobOfferButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#d0e8fc',
+  },
+  acceptButton: {
+    backgroundColor: COLORS.success,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    flex: 1,
+    marginRight: 10,
+    alignItems: 'center',
+    ...SHADOWS.small,
+  },
+  acceptButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    ...FONTS.bodyBold,
+  },
+  declineButton: {
+    backgroundColor: '#ff6b6b', // Red color for decline
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    flex: 1,
+    alignItems: 'center',
+    ...SHADOWS.small,
+  },
+  declineButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    ...FONTS.bodyBold,
+  },
+  jobOfferStatusContainer: {
+    alignItems: 'center',
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#d0e8fc',
+  },
+  jobOfferStatus: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    ...FONTS.bodyBold,
+  },
+  acceptedStatus: {
+    color: COLORS.success,
+  },
+  declinedStatus: {
+    color: '#ff6b6b', // Red color for declined
   },
 });
 

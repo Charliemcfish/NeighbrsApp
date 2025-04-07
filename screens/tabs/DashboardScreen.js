@@ -80,20 +80,12 @@ const DashboardScreen = ({ route, navigation }) => {
             />
             
             <Button 
-              title="View Closed Jobs" 
-              onPress={() => handleNavigate('MyJobs')}
+              title="Find A Helper" 
+              onPress={() => handleNavigate('BrowseHelpers')}
               style={styles.actionButton}
               size="large"
-              icon="checkmark-circle"
+              icon="people"
             />
-            
-            <Button 
-  title="Find A Helper" 
-  onPress={() => handleNavigate('BrowseHelpers')}
-  style={styles.actionButton}
-  size="large"
-  icon="people"
-/>
           </>
         ) : (
           // Actions for helpers

@@ -21,6 +21,7 @@ import {
   query, 
   where, 
   getDocs,
+  updateDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
@@ -191,25 +192,78 @@ const HelperProfileScreen = ({ route, navigation }) => {
         throw new Error('You must be logged in to create job requests');
       }
 
-      // Create the job
-      const jobData = {
+      // Get current user info for the message
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      let userName = 'A neighbor';
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        userName = userData.fullName || userName;
+      }
+
+      // Create a new chat or use existing one
+      const chatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', user.uid)
+      );
+      
+      const querySnapshot = await getDocs(chatsQuery);
+      let existingChatId = null;
+      
+      // Find if a chat already exists between these users
+      querySnapshot.forEach((doc) => {
+        const chatData = doc.data();
+        if (chatData.participants.includes(helperId)) {
+          existingChatId = doc.id;
+        }
+      });
+
+      // If no chat exists, create one
+      let chatId;
+      if (!existingChatId) {
+        const newChatData = {
+          participants: [user.uid, helperId],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastMessage: `${userName} sent you a job offer: ${jobTitle}`,
+          unreadBy: [helperId] // Mark as unread for the helper
+        };
+        
+        const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
+        chatId = newChatRef.id;
+      } else {
+        chatId = existingChatId;
+        // Update the chat's last message and unread status
+        await updateDoc(doc(db, 'chats', chatId), {
+          lastMessage: `${userName} sent you a job offer: ${jobTitle}`,
+          updatedAt: new Date(),
+          unreadBy: [helperId]
+        });
+      }
+
+      // Create the job offer data
+      const jobOfferData = {
         title: jobTitle,
         description: jobDescription,
         jobType: jobType,
         paymentType: paymentType,
         paymentAmount: paymentType === 'fixed' ? parseFloat(paymentAmount) : 0,
         createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        status: 'open',
-        location: '', // Optional field
-        helperAssigned: null,
-        offers: [],
-        // Add a flag that this is a direct request to this helper
-        isDirectRequest: true,
-        directRequestedHelper: helperId
+        createdAt: new Date(),
+        requestedHelper: helperId,
+        status: 'pending' // pending, accepted, declined
       };
 
-      const jobRef = await addDoc(collection(db, 'jobs'), jobData);
+      // Add the job offer message
+      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+        text: `🔔 JOB OFFER: ${jobTitle}\n\nDescription: ${jobDescription}\n\nPayment: ${
+          paymentType === 'fixed' ? `$${paymentAmount}` : 
+          paymentType === 'tip' ? 'Tip Only' : 'No Payment'
+        }\n\nType: ${jobType}\n\nThis is a direct job offer. Please respond to accept or decline.`,
+        senderId: user.uid,
+        createdAt: new Date(),
+        isJobOffer: true,
+        jobOfferData: jobOfferData
+      });
       
       // Reset form and close modal
       setJobTitle('');
@@ -219,27 +273,21 @@ const HelperProfileScreen = ({ route, navigation }) => {
       setPaymentType('fixed');
       setRequestModalVisible(false);
 
-      // Ask if user wants to go to the job details
+      // Alert success
       Alert.alert(
         'Success',
-        'Direct job request created successfully!',
+        'Your job offer has been sent to the helper. You will be notified when they respond.',
         [
           {
-            text: 'View Job',
+            text: 'Go to Chat',
             onPress: () => {
-              // Navigate to Jobs tab first
-              navigation.navigate('HomeScreen', { screen: 'Jobs' });
-              
-              // Then navigate to the job details
-              setTimeout(() => {
-                navigation.navigate('HomeScreen', {
-                  screen: 'Jobs',
-                  params: {
-                    screen: 'JobDetails',
-                    params: { jobId: jobRef.id }
-                  }
-                });
-              }, 100);
+              navigation.navigate('Messages', { 
+                screen: 'ChatDetails', 
+                params: { 
+                  chatId: chatId,
+                  otherUserId: helperId
+                } 
+              });
             }
           },
           {
