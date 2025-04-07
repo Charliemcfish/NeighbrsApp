@@ -167,16 +167,24 @@ const ProfileScreen = ({ route, navigation }) => {
         
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Ionicons name="location" size={22} color={COLORS.primary} style={styles.infoIcon} />
-            <Text style={styles.infoLabel}>Address:</Text>
-            <Text style={styles.infoText}>{userProfile.address}</Text>
+            <View style={styles.infoRowWithIcon}>
+              <Ionicons name="location" size={22} color={COLORS.primary} style={styles.infoIcon} />
+              <View>
+                <Text style={styles.infoLabel}>Address</Text>
+                <Text style={styles.infoText}>{userProfile.address}</Text>
+              </View>
+            </View>
           </View>
           
           {userProfile.aboutMe && (
             <View style={styles.infoRow}>
-              <Ionicons name="person" size={22} color={COLORS.primary} style={styles.infoIcon} />
-              <Text style={styles.infoLabel}>About Me:</Text>
-              <Text style={styles.infoText}>{userProfile.aboutMe}</Text>
+              <View style={styles.infoRowWithIcon}>
+                <Ionicons name="person" size={22} color={COLORS.primary} style={styles.infoIcon} />
+                <View>
+                  <Text style={styles.infoLabel}>About Me</Text>
+                  <Text style={styles.infoText}>{userProfile.aboutMe}</Text>
+                </View>
+              </View>
             </View>
           )}
         </View>
@@ -345,10 +353,12 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   infoRow: {
-    flexDirection: 'row',
     marginBottom: 15,
-    alignItems: 'flex-start',
     paddingVertical: 5,
+  },
+  infoRowWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   infoIcon: {
     marginRight: 10,
@@ -359,13 +369,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
     fontWeight: 'bold',
-    width: 90,
+    marginBottom: 5,
   },
   infoText: {
     ...FONTS.body,
-    flex: 1,
     fontSize: 16,
     color: COLORS.textDark,
+    lineHeight: 22,
   },
   servicesContainer: {
     backgroundColor: COLORS.white,

@@ -194,6 +194,13 @@ const DashboardScreen = ({ route, navigation }) => {
           </View>
         )}
       </View>
+      
+      <TouchableOpacity 
+        style={styles.leaveFeedbackButton}
+        onPress={() => navigation.navigate('Feedback')}
+      >
+        <Text style={styles.leaveFeedbackText}>Leave Feedback</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -285,6 +292,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textMedium,
     lineHeight: 20,
+  },
+  leaveFeedbackButton: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  leaveFeedbackText: {
+    ...FONTS.body,
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
+    fontSize: 16,
   },
 });
 
