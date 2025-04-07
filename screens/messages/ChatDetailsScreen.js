@@ -30,7 +30,8 @@ import {
   arrayUnion,
   arrayRemove,
   getDocs,
-  limit
+  limit,
+  deleteDoc
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
@@ -43,9 +44,23 @@ const ChatDetailsScreen = ({ route, navigation }) => {
   const [otherUser, setOtherUser] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [jobData, setJobData] = useState(null);
+  const [currentChatId, setCurrentChatId] = useState(chatId);
   
   const flatListRef = useRef(null);
   const user = auth.currentUser;
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity 
+          style={styles.headerButton} 
+          onPress={handleShowDeleteOptions}
+        >
+          <Ionicons name="ellipsis-vertical" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, currentChatId]);
 
   useEffect(() => {
     const setupChat = async () => {
@@ -73,6 +88,7 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         // If we already have a chat ID
         if (chatId) {
           chatDocRef = doc(db, 'chats', chatId);
+          setCurrentChatId(chatId);
           
           // Mark the chat as read by the current user
           try {
@@ -140,6 +156,7 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           // Use existing chat or create a new one
           if (existingChat) {
             chatDocRef = doc(db, 'chats', existingChat.id);
+            setCurrentChatId(existingChat.id);
             
             // Mark the chat as read by the current user
             try {
@@ -189,6 +206,7 @@ const ChatDetailsScreen = ({ route, navigation }) => {
             }
             
             const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
+            setCurrentChatId(newChatRef.id);
             
             chatDocRef = newChatRef;
             messagesQuery = query(
@@ -238,10 +256,10 @@ const ChatDetailsScreen = ({ route, navigation }) => {
     if (!inputText.trim()) return;
     
     try {
-      let currentChatId = chatId;
+      let localChatId = currentChatId;
       
       // If we don't have a chat ID but have otherUserId, find or create a chat
-      if (!currentChatId && otherUserId) {
+      if (!localChatId && otherUserId) {
         // Try to find an existing chat between these users
         const chatsQuerySnapshot = await getDocs(
           query(
@@ -266,7 +284,8 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         });
         
         if (existingChat) {
-          currentChatId = existingChat.id;
+          localChatId = existingChat.id;
+          setCurrentChatId(localChatId);
         } else {
           // Create a new chat
           const newChatData = {
@@ -283,13 +302,14 @@ const ChatDetailsScreen = ({ route, navigation }) => {
           }
           
           const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
-          currentChatId = newChatRef.id;
+          localChatId = newChatRef.id;
+          setCurrentChatId(localChatId);
         }
       }
   
-      if (currentChatId) {
+      if (localChatId) {
         // Add the message
-        await addDoc(collection(db, 'chats', currentChatId, 'messages'), {
+        await addDoc(collection(db, 'chats', localChatId, 'messages'), {
           text: inputText.trim(),
           senderId: user.uid,
           createdAt: new Date(),
@@ -297,7 +317,7 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         
         // Update the chat's last message, timestamp, and unread status
         // Get current chat data to check the unreadBy array
-        const chatDoc = await getDoc(doc(db, 'chats', currentChatId));
+        const chatDoc = await getDoc(doc(db, 'chats', localChatId));
         const chatData = chatDoc.exists() ? chatDoc.data() : {};
         
         // Get the other participant ID
@@ -305,13 +325,13 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         
         // Simple direct approach: set unreadBy to include only the other user
         if (otherParticipantId) {
-          await updateDoc(doc(db, 'chats', currentChatId), {
+          await updateDoc(doc(db, 'chats', localChatId), {
             lastMessage: inputText.trim(),
             updatedAt: new Date(),
             unreadBy: [otherParticipantId]
           });
         } else {
-          await updateDoc(doc(db, 'chats', currentChatId), {
+          await updateDoc(doc(db, 'chats', localChatId), {
             lastMessage: inputText.trim(),
             updatedAt: new Date()
           });
@@ -324,6 +344,71 @@ const ChatDetailsScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
+  };
+
+  const handleShowDeleteOptions = () => {
+    Alert.alert(
+      'Chat Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete Chat',
+          style: 'destructive',
+          onPress: confirmDeleteChat
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteChat = () => {
+    Alert.alert(
+      'Delete Chat',
+      'Are you sure you want to delete this conversation? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: handleDeleteChat
+        }
+      ]
+    );
+  };
+
+  const handleDeleteChat = async () => {
+    try {
+      if (!currentChatId) {
+        throw new Error('No chat to delete');
+      }
+
+      // First, delete all messages in the chat
+      const messagesQuery = query(collection(db, 'chats', currentChatId, 'messages'));
+      const messagesSnapshot = await getDocs(messagesQuery);
+      
+      const messageDeletions = messagesSnapshot.docs.map(messageDoc => 
+        deleteDoc(doc(db, 'chats', currentChatId, 'messages', messageDoc.id))
+      );
+      
+      // Wait for all message deletions to complete
+      await Promise.all(messageDeletions);
+      
+      // Then delete the chat document itself
+      await deleteDoc(doc(db, 'chats', currentChatId));
+      
+      // Navigate back to the chat list
+      navigation.navigate('ChatsList', { refresh: true });
+
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      Alert.alert('Error', 'Failed to delete chat. Please try again.');
     }
   };
 
@@ -406,7 +491,12 @@ const ChatDetailsScreen = ({ route, navigation }) => {
         <Text style={styles.headerTitle}>
           {otherUser?.fullName || 'Chat'}
         </Text>
-        <View style={styles.headerRight} />
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={handleShowDeleteOptions}
+        >
+          <Ionicons name="ellipsis-vertical" size={24} color={COLORS.white} />
+        </TouchableOpacity>
       </View>
       
       {jobData && (
@@ -498,6 +588,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
   headerTitle: {
     ...FONTS.heading,
     fontSize: 18,
@@ -505,9 +603,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     flex: 1,
     textAlign: 'center',
-  },
-  headerRight: {
-    width: 40,
   },
   jobBanner: {
     flexDirection: 'row',

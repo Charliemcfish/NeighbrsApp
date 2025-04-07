@@ -7,7 +7,8 @@ import {
   FlatList, 
   TouchableOpacity, 
   ActivityIndicator,
-  Image
+  Image,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -21,14 +22,23 @@ import {
   getDoc,
   limit,
   updateDoc,
-  arrayRemove
+  arrayRemove,
+  deleteDoc
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 
-const ChatsListScreen = ({ navigation }) => {
+const ChatsListScreen = ({ navigation, route }) => {
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Check if we need to refresh (coming back from a chat that was deleted)
+  useEffect(() => {
+    if (route.params?.refresh) {
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [route.params?.refresh]);
 
   useEffect(() => {
     const loadChats = async () => {
@@ -113,6 +123,7 @@ const ChatsListScreen = ({ navigation }) => {
               ...chatData,
               otherParticipantName,
               otherParticipantImage,
+              otherParticipantId,
               jobInfo,
               updatedAt: chatData.updatedAt ? 
                 (chatData.updatedAt.toDate ? chatData.updatedAt.toDate() : chatData.updatedAt) 
@@ -139,7 +150,7 @@ const ChatsListScreen = ({ navigation }) => {
     };
 
     loadChats();
-  }, []);
+  }, [refreshKey]);
 
   const handleOpenChat = async (chat) => {
     // Mark the chat as read when opened
@@ -157,15 +168,57 @@ const ChatsListScreen = ({ navigation }) => {
     navigation.navigate('ChatDetails', { 
       chatId: chat.id,
       chatName: chat.otherParticipantName,
-      otherUserId: chat.participants.find(id => id !== auth.currentUser.uid),
+      otherUserId: chat.otherParticipantId,
       jobId: chat.jobId
     });
+  };
+
+  const handleDeleteChat = async (chatId) => {
+    Alert.alert(
+      'Delete Chat',
+      'Are you sure you want to delete this conversation? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // First, delete all messages in the chat
+              const messagesQuery = query(collection(db, 'chats', chatId, 'messages'));
+              const messagesSnapshot = await getDocs(messagesQuery);
+              
+              const messageDeletions = messagesSnapshot.docs.map(messageDoc => 
+                deleteDoc(doc(db, 'chats', chatId, 'messages', messageDoc.id))
+              );
+              
+              // Wait for all message deletions to complete
+              await Promise.all(messageDeletions);
+              
+              // Then delete the chat document itself
+              await deleteDoc(doc(db, 'chats', chatId));
+              
+              // Refresh the list
+              setRefreshKey(prev => prev + 1);
+              
+            } catch (error) {
+              console.error('Error deleting chat:', error);
+              Alert.alert('Error', 'Failed to delete chat. Please try again.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderChatItem = ({ item }) => (
     <TouchableOpacity 
       style={[styles.chatItem, item.hasUnread && styles.unreadChatItem]}
       onPress={() => handleOpenChat(item)}
+      onLongPress={() => handleDeleteChat(item.id)}
     >
       <View style={styles.avatarContainer}>
         {item.otherParticipantImage ? (
@@ -220,12 +273,15 @@ const ChatsListScreen = ({ navigation }) => {
       ) : (
         <>
           {chats.length > 0 ? (
-            <FlatList
-              data={chats}
-              renderItem={renderChatItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContainer}
-            />
+            <>
+              <Text style={styles.listHint}>Long press on a chat to delete it</Text>
+              <FlatList
+                data={chats}
+                renderItem={renderChatItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.listContainer}
+              />
+            </>
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="chatbubbles-outline" size={80} color="#000" />
@@ -252,6 +308,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
+  },
+  listHint: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    marginVertical: 10,
+    fontStyle: 'italic',
   },
   headerTitle: {
     ...FONTS.heading,
