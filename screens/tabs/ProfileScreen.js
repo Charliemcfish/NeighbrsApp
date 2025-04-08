@@ -1,4 +1,4 @@
-// screens/tabs/ProfileScreen.js
+// screens/tabs/ProfileScreen.js - with fixed About Me text container
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -10,6 +10,7 @@ import {
   Alert,
   Image
 } from 'react-native';
+import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   signOut, 
@@ -66,6 +67,15 @@ const ProfileScreen = ({ route, navigation }) => {
         });
         
         setUserType('neighbor');
+        
+        // Navigate to the Dashboard tab with updated params
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: 'Dashboard',
+            params: { userType: 'neighbor', updatedAt: new Date().getTime() },
+          })
+        );
+        
         Alert.alert('Success', 'Helper mode has been turned off');
       }
     } catch (error) {
@@ -169,7 +179,7 @@ const ProfileScreen = ({ route, navigation }) => {
           <View style={styles.infoRow}>
             <View style={styles.infoRowWithIcon}>
               <Ionicons name="location" size={22} color={COLORS.primary} style={styles.infoIcon} />
-              <View>
+              <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Address</Text>
                 <Text style={styles.infoText}>{userProfile.address}</Text>
               </View>
@@ -180,7 +190,7 @@ const ProfileScreen = ({ route, navigation }) => {
             <View style={styles.infoRow}>
               <View style={styles.infoRowWithIcon}>
                 <Ionicons name="person" size={22} color={COLORS.primary} style={styles.infoIcon} />
-                <View>
+                <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>About Me</Text>
                   <Text style={styles.infoText}>{userProfile.aboutMe}</Text>
                 </View>
@@ -364,6 +374,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
     marginTop: 2,
   },
+  infoTextContainer: {
+    flex: 1, // This ensures the text container takes the remaining width
+  },
   infoLabel: {
     ...FONTS.bodyBold,
     fontSize: 16,
@@ -376,6 +389,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
     lineHeight: 22,
+    flexWrap: 'wrap', // Ensures text wraps properly
   },
   servicesContainer: {
     backgroundColor: COLORS.white,
@@ -394,6 +408,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
     marginLeft: 10,
+    flex: 1, // Ensure the text has space to wrap
   },
   preferencesCard: {
     backgroundColor: COLORS.white,

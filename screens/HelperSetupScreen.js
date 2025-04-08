@@ -10,12 +10,11 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
-
-
-// Update your navigation.js to include this screen
+import { COLORS, FONTS, SHADOWS } from '../styles/theme';
 
 const jobTypes = [
   'Package Delivery', 
@@ -99,100 +98,135 @@ const HelperSetupScreen = ({ route, navigation }) => {
 
   return (
     <KeyboardAvoidingWrapper>
-
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Set Up Your Helper Profile</Text>
-        
-        <Text style={styles.sectionTitle}>What can you help with?</Text>
-        <Text style={styles.description}>
-          Select the types of jobs you're willing to help neighbors with:
-        </Text>
-        
-        <View style={styles.jobTypesContainer}>
-          {jobTypes.map((jobType) => (
-            <TouchableOpacity
-              key={jobType}
-              style={[
-                styles.jobTypeButton,
-                selectedJobTypes.includes(jobType) && styles.selectedJobType
-              ]}
-              onPress={() => toggleJobType(jobType)}
-            >
-              <Text 
-                style={[
-                  styles.jobTypeText,
-                  selectedJobTypes.includes(jobType) && styles.selectedJobTypeText
-                ]}
-              >
-                {jobType}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={COLORS.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Set Up Helper Profile</Text>
+          <View style={{ width: 40 }} /> {/* Empty view for spacing */}
         </View>
-        
-        <Text style={styles.label}>How can you help?</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={helpDescription}
-          onChangeText={setHelpDescription}
-          placeholder="Describe how you can help neighbors with these types of jobs..."
-          multiline
-          numberOfLines={4}
-        />
-        
-        <Text style={styles.sectionTitle}>Payment Information</Text>
-        <Text style={styles.description}>
-          Enter your bank account details to receive payments:
-        </Text>
-        
-        <Text style={styles.label}>Account Holder Name</Text>
-        <TextInput 
-          style={styles.input}
-          value={accountName}
-          onChangeText={setAccountName}
-          placeholder="Enter full name on account"
-        />
-        
-        <Text style={styles.label}>Account Number</Text>
-        <TextInput 
-        
-          style={styles.input}
-          value={accountNumber}
-          onChangeText={setAccountNumber}
-          placeholder="Enter account number"
-          keyboardType="number-pad"
-        />
-        
-        <Text style={styles.label}>Routing Number</Text>
-        <TextInput
-          style={styles.input}
-          value={routingNumber}
-          onChangeText={setRoutingNumber}
-          placeholder="Enter routing number"
-          keyboardType="number-pad"
-        />
-        
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.disabledButton]} 
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Saving...' : 'Complete Setup'}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
-    </KeyboardAvoidingWrapper>
 
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.jobTypesContainer}>
+            <Text style={styles.sectionTitle}>What can you help with?</Text>
+            <Text style={styles.description}>
+              Select the types of jobs you're willing to help neighbors with:
+            </Text>
+            
+            <View style={styles.jobTypesWrapper}>
+              {jobTypes.map((jobType) => (
+                <TouchableOpacity
+                  key={jobType}
+                  style={[
+                    styles.jobTypeButton,
+                    selectedJobTypes.includes(jobType) && styles.selectedJobType
+                  ]}
+                  onPress={() => toggleJobType(jobType)}
+                >
+                  <Text 
+                    style={[
+                      styles.jobTypeText,
+                      selectedJobTypes.includes(jobType) && styles.selectedJobTypeText
+                    ]}
+                  >
+                    {jobType}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          
+          <Text style={styles.label}>How can you help?</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={helpDescription}
+            onChangeText={setHelpDescription}
+            placeholder="Describe how you can help neighbors with these types of jobs..."
+            multiline
+            numberOfLines={4}
+          />
+          
+          <Text style={styles.sectionTitle}>Payment Information</Text>
+          <Text style={styles.description}>
+            Enter your bank account details to receive payments:
+          </Text>
+          
+          <Text style={styles.label}>Account Holder Name</Text>
+          <TextInput 
+            style={styles.input}
+            value={accountName}
+            onChangeText={setAccountName}
+            placeholder="Enter full name on account"
+          />
+          
+          <Text style={styles.label}>Account Number</Text>
+          <TextInput 
+            style={styles.input}
+            value={accountNumber}
+            onChangeText={setAccountNumber}
+            placeholder="Enter account number"
+            keyboardType="number-pad"
+          />
+          
+          <Text style={styles.label}>Routing Number</Text>
+          <TextInput
+            style={styles.input}
+            value={routingNumber}
+            onChangeText={setRoutingNumber}
+            placeholder="Enter routing number"
+            keyboardType="number-pad"
+          />
+          
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.disabledButton]} 
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Saving...' : 'Complete Setup'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: 20,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    ...SHADOWS.small,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  headerTitle: {
+    ...FONTS.heading,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'center',
   },
   scrollContent: {
     padding: 20,
@@ -215,9 +249,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   jobTypesContainer: {
+    marginBottom: 20,
+  },
+  jobTypesWrapper: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 30,
+    marginBottom: 10,
   },
   jobTypeButton: {
     borderWidth: 1,
@@ -248,6 +285,7 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 20,
     fontSize: 16,
+    backgroundColor: 'white',
   },
   textArea: {
     height: 100,
@@ -259,6 +297,7 @@ const styles = StyleSheet.create({
     padding: 15,
     alignItems: 'center',
     marginTop: 20,
+    marginBottom: 30,
   },
   buttonText: {
     color: 'white',

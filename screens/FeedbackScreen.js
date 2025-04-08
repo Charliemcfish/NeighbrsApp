@@ -90,59 +90,61 @@ const FeedbackScreen = ({ navigation }) => {
           <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
         </TouchableOpacity>
         
-        <ScrollView style={styles.scrollView}>
-          <View style={styles.formContainer}>
-            <Text style={styles.title}>Help Us Improve Neighbrs</Text>
-            
-            <Text style={styles.subtitle}>
-              We value your feedback and are always looking to enhance your experience.
-            </Text>
-            
-            <View style={styles.categoryContainer}>
-              <Text style={styles.label}>Feedback Category</Text>
-              <View style={styles.categoryButtonContainer}>
-                {feedbackCategories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.categoryButton,
-                      category === cat && styles.selectedCategoryButton
-                    ]}
-                    onPress={() => setCategory(cat)}
-                  >
-                    <Text 
+        <View style={styles.contentContainer}>
+          <ScrollView contentContainerStyle={styles.scrollViewContent}>
+            <View style={styles.formContainer}>
+              <Text style={styles.title}>Help Us Improve Neighbrs</Text>
+              
+              <Text style={styles.subtitle}>
+                We value your feedback and are always looking to enhance your experience.
+              </Text>
+              
+              <View style={styles.categoryContainer}>
+                <Text style={styles.label}>Feedback Category</Text>
+                <View style={styles.categoryButtonContainer}>
+                  {feedbackCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
                       style={[
-                        styles.categoryButtonText,
-                        category === cat && styles.selectedCategoryButtonText
+                        styles.categoryButton,
+                        category === cat && styles.selectedCategoryButton
                       ]}
+                      onPress={() => setCategory(cat)}
                     >
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text 
+                        style={[
+                          styles.categoryButtonText,
+                          category === cat && styles.selectedCategoryButtonText
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
+              
+              <Input
+                label="Your Feedback"
+                value={feedbackMessage}
+                onChangeText={setFeedbackMessage}
+                placeholder="Share your thoughts, suggestions, or report any issues..."
+                multiline
+                numberOfLines={6}
+                required
+              />
+              
+              <Button 
+                title="Submit Feedback"
+                onPress={handleSubmitFeedback}
+                loading={loading}
+                disabled={loading}
+                style={styles.submitButton}
+                size="large"
+              />
             </View>
-            
-            <Input
-              label="Your Feedback"
-              value={feedbackMessage}
-              onChangeText={setFeedbackMessage}
-              placeholder="Share your thoughts, suggestions, or report any issues..."
-              multiline
-              numberOfLines={6}
-              required
-            />
-            
-            <Button 
-              title="Submit Feedback"
-              onPress={handleSubmitFeedback}
-              loading={loading}
-              disabled={loading}
-              style={styles.submitButton}
-              size="large"
-            />
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
       </View>
     </KeyboardAvoidingWrapper>
   );
@@ -166,12 +168,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.small,
   },
-  scrollView: {
+  contentContainer: {
     flex: 1,
-    marginTop: 80,
+    justifyContent: 'center', // Center vertically
+  },
+  scrollViewContent: {
+    flexGrow: 1,
+    justifyContent: 'center', // Center vertically inside ScrollView
   },
   formContainer: {
     padding: 20,
+    marginTop: 20, // Add some top margin for the back button
   },
   title: {
     ...FONTS.heading,
@@ -186,7 +193,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textMedium,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 30,
   },
   categoryContainer: {
     marginBottom: 20,
@@ -200,6 +207,7 @@ const styles = StyleSheet.create({
   categoryButtonContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center', // Center category buttons
   },
   categoryButton: {
     borderWidth: 1,

@@ -8,8 +8,16 @@ import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
 
 const DashboardScreen = ({ route, navigation }) => {
-  const { userType } = route.params || {};
+  const { userType: routeUserType, updatedAt } = route.params || {};
   const [userName, setUserName] = useState('');
+  const [userType, setUserType] = useState(routeUserType || 'neighbor');
+
+  // This useEffect will run whenever route.params changes
+  useEffect(() => {
+    if (route.params?.userType) {
+      setUserType(route.params.userType);
+    }
+  }, [route.params]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -20,6 +28,8 @@ const DashboardScreen = ({ route, navigation }) => {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUserName(userData.fullName || '');
+            // Update userType based on Firestore data
+            setUserType(userData.isHelper ? 'helper' : 'neighbor');
           }
         }
       } catch (error) {
@@ -28,7 +38,7 @@ const DashboardScreen = ({ route, navigation }) => {
     };
 
     fetchUserData();
-  }, []);
+  }, [updatedAt]); // Re-fetch when updatedAt changes
 
   const handleNavigate = (screen, params = {}) => {
     if (screen === 'PostJob') {

@@ -14,34 +14,42 @@ import ProfileScreen from './tabs/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 
-const HomeScreen = () => {
+const HomeScreen = ({ route }) => {
+  const { refreshUserType, userType: routeUserType } = route.params || {};
   const [userType, setUserType] = useState('neighbor'); // Default as neighbor
   const [loading, setLoading] = useState(true);
   const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
-    const getUserData = async () => {
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            // If user is set up as a helper, set userType accordingly
-            if (userData.isHelper) {
-              setUserType('helper');
-            }
+    // If refreshUserType and userType are provided via params, update the state
+    if (refreshUserType && routeUserType) {
+      setUserType(routeUserType);
+    } else {
+      getUserData();
+    }
+  }, [refreshUserType, routeUserType]);
+
+  const getUserData = async () => {
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          // If user is set up as a helper, set userType accordingly
+          if (userData.isHelper) {
+            setUserType('helper');
+          } else {
+            setUserType('neighbor');
           }
         }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    getUserData();
-  }, []);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const checkUnreadMessages = async () => {
