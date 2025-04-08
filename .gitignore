@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-service_account_key.json
+
 # Expo
 .expo/
 dist/
@@ -31,6 +31,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+service_account_key.json
 
 # typescript
 *.tsbuildinfo
