@@ -44,14 +44,7 @@ const LandingScreen = ({ navigation }) => {
             style={styles.button}
           />
           
-          <TouchableOpacity 
-            style={styles.learnMoreContainer}
-            onPress={() => {/* Handle Learn More */}}
-          >
-            <Text style={styles.learnMoreText}>
-              Learn how to use Neighbrs
-            </Text>
-          </TouchableOpacity>
+         
         </View>
       </View>
     </SafeAreaView>
@@ -70,8 +63,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   logo: {
-    width: 300,
-    height: 300,
+    width: 400,
+    height: 400,
     marginTop: -50,
   },
   titleContainer: {
