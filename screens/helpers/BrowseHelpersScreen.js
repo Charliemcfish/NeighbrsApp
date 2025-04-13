@@ -21,9 +21,10 @@ import {
   getDoc,
   doc 
 } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
+import { calculateDistance, getReadableDistance } from '../../utils/locationService';
 
 // Default job types - same as in PostJobScreen
 const DEFAULT_JOB_TYPES = [
@@ -40,8 +41,25 @@ const BrowseHelpersScreen = ({ navigation }) => {
   const [selectedJobType, setSelectedJobType] = useState('');
   const [jobTypeModalVisible, setJobTypeModalVisible] = useState(false);
   const [filterApplied, setFilterApplied] = useState(false);
+  const [maxDistance, setMaxDistance] = useState('');
+  const [userLocation, setUserLocation] = useState(null);
+  const [distanceModalVisible, setDistanceModalVisible] = useState(false);
 
   useEffect(() => {
+    const getUserLocation = async () => {
+      try {
+        const user = auth.currentUser;
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (userDoc.exists() && userDoc.data().location && userDoc.data().location.coordinates) {
+          setUserLocation(userDoc.data().location.coordinates);
+        }
+      } catch (error) {
+        console.error('Error getting user location:', error);
+      }
+    };
+    
+    getUserLocation();
     loadHelpers();
   }, []);
 
@@ -74,15 +92,37 @@ const BrowseHelpersScreen = ({ navigation }) => {
     }
   };
 
-  // Filter helpers based on search query and selected job type
-  const filteredHelpers = helpers.filter(helper => {
+  // Calculate distances for all helpers
+  const helpersWithDistance = React.useMemo(() => {
+    if (!userLocation) return helpers;
+    
+    return helpers.map(helper => {
+      if (helper.location && helper.location.coordinates) {
+        const distance = calculateDistance(userLocation, helper.location.coordinates);
+        return {
+          ...helper,
+          distance
+        };
+      }
+      return {
+        ...helper,
+        distance: null
+      };
+    });
+  }, [helpers, userLocation]);
+
+  // Filter helpers based on search query, selected job type, and distance
+  const filteredHelpers = helpersWithDistance.filter(helper => {
     const matchesSearch = searchQuery === '' || 
       (helper.fullName && helper.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesJobType = !filterApplied || !selectedJobType || 
       (helper.jobTypes && helper.jobTypes.includes(selectedJobType));
     
-    return matchesSearch && matchesJobType;
+    const matchesDistance = !filterApplied || !maxDistance || !helper.distance || 
+      helper.distance.miles <= parseFloat(maxDistance);
+    
+    return matchesSearch && matchesJobType && matchesDistance;
   });
 
   const handleSelectJobType = (jobType) => {
@@ -91,9 +131,17 @@ const BrowseHelpersScreen = ({ navigation }) => {
     setJobTypeModalVisible(false);
   };
 
+  const handleSetMaxDistance = () => {
+    setFilterApplied(true);
+    setDistanceModalVisible(false);
+  };
+
   const resetFilters = () => {
     setSelectedJobType('');
+    setMaxDistance('');
     setFilterApplied(false);
+    setJobTypeModalVisible(false);
+    setDistanceModalVisible(false);
   };
 
   const navigateToHelperProfile = (helperId) => {
@@ -118,6 +166,11 @@ const BrowseHelpersScreen = ({ navigation }) => {
         <View style={styles.helperInfo}>
           <Text style={styles.helperName}>{item.fullName || 'Anonymous Helper'}</Text>
           <Text style={styles.helperLocation}>{item.address || 'Location unknown'}</Text>
+          {item.distance && (
+            <Text style={styles.distanceText}>
+              {getReadableDistance(item.distance)}
+            </Text>
+          )}
         </View>
       </View>
       
@@ -176,25 +229,34 @@ const BrowseHelpersScreen = ({ navigation }) => {
           />
         </View>
         
-        <TouchableOpacity 
-          style={styles.jobTypeFilterButton}
-          onPress={() => setJobTypeModalVisible(true)}
-        >
-          <Text style={[
-            styles.jobTypeFilterText,
-            selectedJobType ? styles.activeFilterText : styles.placeholderText
-          ]}>
-            {selectedJobType || 'Filter by job type'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={selectedJobType ? COLORS.primary : '#666'} />
-        </TouchableOpacity>
+        <View style={styles.filtersRow}>
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => setJobTypeModalVisible(true)}
+          >
+            <Text style={styles.filterButtonText}>
+              {selectedJobType ? `Service: ${selectedJobType}` : 'Filter by service'}
+            </Text>
+            <Ionicons name="options-outline" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => setDistanceModalVisible(true)}
+          >
+            <Text style={styles.filterButtonText}>
+              {maxDistance ? `Distance: ${maxDistance} mi` : 'Distance'}
+            </Text>
+            <Ionicons name="locate-outline" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
         
         {filterApplied && (
           <TouchableOpacity 
             style={styles.resetButton}
             onPress={resetFilters}
           >
-            <Text style={styles.resetButtonText}>Reset</Text>
+            <Text style={styles.resetButtonText}>Reset Filters</Text>
             <Ionicons name="close-circle" size={16} color={COLORS.primary} />
           </TouchableOpacity>
         )}
@@ -219,7 +281,7 @@ const BrowseHelpersScreen = ({ navigation }) => {
               <Text style={styles.emptyText}>No helpers found</Text>
               <Text style={styles.emptySubText}>
                 {filterApplied ? 
-                  "Try a different job type or remove filters to see all helpers." : 
+                  "Try adjusting your filters to see more helpers." : 
                   "There are no helpers available at the moment."}
               </Text>
               {filterApplied && (
@@ -245,7 +307,7 @@ const BrowseHelpersScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Job Type</Text>
+              <Text style={styles.modalTitle}>Select Service Type</Text>
               <TouchableOpacity onPress={() => setJobTypeModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -281,10 +343,90 @@ const BrowseHelpersScreen = ({ navigation }) => {
                 title="Clear Selection"
                 onPress={() => {
                   setSelectedJobType('');
-                  setJobTypeModalVisible(false);
                   setFilterApplied(false);
+                  setJobTypeModalVisible(false);
                 }}
                 type="secondary"
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Distance Filter Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={distanceModalVisible}
+        onRequestClose={() => setDistanceModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Set Maximum Distance</Text>
+              <TouchableOpacity onPress={() => setDistanceModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.distanceFilterContainer}>
+              <Text style={styles.distanceLabel}>Maximum distance (miles):</Text>
+              <TextInput
+                style={styles.distanceInput}
+                value={maxDistance}
+                onChangeText={setMaxDistance}
+                placeholder="Enter distance"
+                keyboardType="numeric"
+              />
+              
+              {!userLocation && (
+                <Text style={styles.locationWarning}>
+                  Note: You need to set your address in your profile for accurate distance calculations.
+                </Text>
+              )}
+              
+              <View style={styles.distancePresets}>
+                <TouchableOpacity
+                  style={styles.distancePresetButton}
+                  onPress={() => setMaxDistance('5')}
+                >
+                  <Text style={styles.distancePresetText}>5 mi</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.distancePresetButton}
+                  onPress={() => setMaxDistance('10')}
+                >
+                  <Text style={styles.distancePresetText}>10 mi</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.distancePresetButton}
+                  onPress={() => setMaxDistance('25')}
+                >
+                  <Text style={styles.distancePresetText}>25 mi</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.distancePresetButton}
+                  onPress={() => setMaxDistance('50')}
+                >
+                  <Text style={styles.distancePresetText}>50 mi</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.modalFooter}>
+              <Button
+                title="Clear"
+                onPress={() => {
+                  setMaxDistance('');
+                  setDistanceModalVisible(false);
+                }}
+                type="secondary"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Apply"
+                onPress={handleSetMaxDistance}
                 style={styles.modalButton}
               />
             </View>
@@ -349,26 +491,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
   },
-  jobTypeFilterButton: {
+  filtersRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     backgroundColor: COLORS.white,
     borderRadius: 25,
     paddingHorizontal: 15,
-    height: 45,
+    paddingVertical: 10,
+    flex: 0.48,
     ...SHADOWS.small,
   },
-  jobTypeFilterText: {
+  filterButtonText: {
     ...FONTS.body,
-    fontSize: 16,
-  },
-  activeFilterText: {
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  placeholderText: {
-    color: '#999',
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginRight: 5,
   },
   resetButton: {
     flexDirection: 'row',
@@ -430,6 +573,13 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     fontSize: 14,
     color: COLORS.textMedium,
+    marginBottom: 4,
+  },
+  distanceText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: 'bold',
   },
   jobTypesContainer: {
     marginBottom: 15,
@@ -554,11 +704,57 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: 'bold',
   },
+  distanceFilterContainer: {
+    padding: 10,
+  },
+  distanceLabel: {
+    ...FONTS.body,
+    fontSize: 16,
+    marginBottom: 10,
+    color: COLORS.textDark,
+  },
+  distanceInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginBottom: 15,
+    ...FONTS.body,
+    fontSize: 16,
+  },
+  locationWarning: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.warning,
+    fontStyle: 'italic',
+    marginBottom: 15,
+  },
+  distancePresets: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  distancePresetButton: {
+    backgroundColor: '#f0f7ff',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  distancePresetText: {
+    ...FONTS.body,
+    color: COLORS.primary,
+  },
   modalFooter: {
-    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   modalButton: {
-    width: '100%',
+    flex: 0.48,
   },
 });
 

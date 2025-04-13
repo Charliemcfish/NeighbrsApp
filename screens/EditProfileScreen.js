@@ -1,4 +1,3 @@
-// screens/EditProfileScreen.js
 import React, { useState } from 'react';
 import { 
   View, 
@@ -17,6 +16,7 @@ import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
+import { geocodeAddress } from '../utils/locationService';
 
 const EditProfileScreen = ({ route, navigation }) => {
   const { userProfile } = route.params;
@@ -66,12 +66,26 @@ const EditProfileScreen = ({ route, navigation }) => {
         throw new Error('User not authenticated');
       }
 
+      // Geocode the address if it's changed
+      let locationData = null;
+      if (address !== userProfile.address) {
+        locationData = await geocodeAddress(address);
+      }
+
       // Prepare updated profile data
       const updatedProfile = {
         fullName,
-        address,
+        address: locationData?.formattedAddress || address,
         aboutMe,
       };
+
+      // Update location data if address was changed
+      if (locationData) {
+        updatedProfile.location = {
+          address: locationData.formattedAddress || address,
+          coordinates: locationData.coordinates
+        };
+      }
 
       // Only update profileImage if it's changed
       if (profileImage && profileImage !== userProfile.profileImage) {

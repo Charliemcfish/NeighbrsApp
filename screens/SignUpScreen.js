@@ -20,6 +20,7 @@ import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { COLORS, FONTS } from '../styles/theme';
+import { geocodeAddress } from '../utils/locationService';
 
 const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -82,11 +83,18 @@ const SignUpScreen = ({ navigation }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Prepare user data - only include profileImage if it exists
+      // Geocode the address to get coordinates
+      const locationData = await geocodeAddress(address);
+
+      // Prepare user data with location information
       const userData = {
         fullName,
         email,
-        address,
+        address: locationData?.formattedAddress || address,
+        location: {
+          address: locationData?.formattedAddress || address,
+          coordinates: locationData?.coordinates || null
+        },
         aboutMe: aboutMe || "", // Use empty string instead of undefined
         isHelper: wantToBeHelper,
         createdAt: new Date(),

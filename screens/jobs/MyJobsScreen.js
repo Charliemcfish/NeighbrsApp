@@ -14,13 +14,29 @@ import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebas
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
+import { calculateDistance, getReadableDistance } from '../../utils/locationService';
 
 const MyJobsScreen = ({ navigation }) => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open'); // open, in-progress, completed
+  const [userLocation, setUserLocation] = useState(null);
 
   useEffect(() => {
+    const getUserLocation = async () => {
+      try {
+        const user = auth.currentUser;
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (userDoc.exists() && userDoc.data().location && userDoc.data().location.coordinates) {
+          setUserLocation(userDoc.data().location.coordinates);
+        }
+      } catch (error) {
+        console.error('Error getting user location:', error);
+      }
+    };
+    
+    getUserLocation();
     loadJobs();
   }, [filter]);
 
@@ -64,22 +80,31 @@ const MyJobsScreen = ({ navigation }) => {
       // For each job, get helper data if assigned
       const enhancedJobsList = await Promise.all(
         jobsList.map(async (job) => {
+          // Add helper info if assigned
+          let helperData = null;
           if (job.helperAssigned) {
             try {
               const helperDoc = await getDoc(doc(db, 'users', job.helperAssigned));
               if (helperDoc.exists()) {
-                const helperData = helperDoc.data();
-                return {
-                  ...job,
-                  helperName: helperData.fullName,
-                  helperImage: helperData.profileImage
-                };
+                helperData = helperDoc.data();
               }
             } catch (error) {
               console.error('Error getting helper info:', error);
             }
           }
-          return job;
+          
+          // Calculate distance if job has coordinates and user has location
+          let distance = null;
+          if (userLocation && job.locationCoordinates) {
+            distance = calculateDistance(userLocation, job.locationCoordinates);
+          }
+          
+          return {
+            ...job,
+            helperName: helperData?.fullName,
+            helperImage: helperData?.profileImage,
+            distance: distance
+          };
         })
       );
 
@@ -118,6 +143,15 @@ const MyJobsScreen = ({ navigation }) => {
           </View>
         )}
       </View>
+      
+      {item.distance && (
+        <View style={styles.distanceContainer}>
+          <Ionicons name="navigate" size={18} color={COLORS.primary} />
+          <Text style={styles.distanceText}>
+            {getReadableDistance(item.distance)}
+          </Text>
+        </View>
+      )}
       
       <Text 
         style={styles.jobDesc}
@@ -367,6 +401,18 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     color: COLORS.textMedium,
     fontSize: 14,
+    marginLeft: 5,
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  distanceText: {
+    ...FONTS.body,
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: 'bold',
     marginLeft: 5,
   },
   jobDesc: {

@@ -1,5 +1,5 @@
 // screens/jobs/PostJobScreen.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -12,7 +12,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import KeyboardAvoidingWrapper from '../../components/KeyboardAvoidingWrapper';
 import Button from '../../components/Button';
@@ -34,13 +34,41 @@ const PostJobScreen = ({ navigation }) => {
   const [customJobType, setCustomJobType] = useState('');
   const [paymentType, setPaymentType] = useState('fixed'); // 'fixed', 'tip', 'free'
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [location, setLocation] = useState('');
+  const [userLocation, setUserLocation] = useState(null);
+  const [userAddress, setUserAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [jobTypeModalVisible, setJobTypeModalVisible] = useState(false);
 
+  // Load user's location from profile
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          
+          // Set the user's location data
+          if (userData.location) {
+            setUserLocation(userData.location.coordinates);
+            setUserAddress(userData.location.address || userData.address);
+          } else if (userData.address) {
+            setUserAddress(userData.address);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+      }
+    };
+    
+    loadUserProfile();
+  }, []);
+
   const handlePostJob = async () => {
-    if (!title || !description || !location) {
-      Alert.alert('Error', 'Please fill in the job title, description, and location');
+    if (!title || !description) {
+      Alert.alert('Error', 'Please fill in the job title and description');
       return;
     }
 
@@ -51,6 +79,11 @@ const PostJobScreen = ({ navigation }) => {
 
     if (paymentType === 'fixed' && !paymentAmount) {
       Alert.alert('Error', 'Please enter a payment amount');
+      return;
+    }
+
+    if (!userAddress) {
+      Alert.alert('Error', 'We could not find your address. Please update your profile with a valid address.');
       return;
     }
 
@@ -69,7 +102,8 @@ const PostJobScreen = ({ navigation }) => {
         title,
         description,
         jobType: finalJobType,
-        location,
+        location: userAddress,
+        locationCoordinates: userLocation || null,
         paymentType,
         paymentAmount: paymentType === 'fixed' ? parseFloat(paymentAmount) : 0,
         createdBy: user.uid,
@@ -158,13 +192,18 @@ const PostJobScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            <Input
-              label="Location"
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Enter the job location"
-              required
-            />
+            <View style={styles.jobLocationContainer}>
+              <Text style={styles.label}>Job Location</Text>
+              <Text style={styles.locationInfo}>
+                {userAddress || 'Address not available. Please update your profile.'}
+              </Text>
+              <TouchableOpacity 
+                style={styles.editLocationButton}
+                onPress={() => navigation.navigate('EditProfile', { userProfile: { address: userAddress } })}
+              >
+                <Text style={styles.editLocationText}>Edit in profile</Text>
+              </TouchableOpacity>
+            </View>
             
             <Input
               label="Description"
@@ -357,6 +396,29 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: '#999',
+  },
+  jobLocationContainer: {
+    marginBottom: 16,
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  locationInfo: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
+    marginBottom: 10,
+  },
+  editLocationButton: {
+    alignSelf: 'flex-end',
+  },
+  editLocationText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
   paymentTypeContainer: {
     flexDirection: 'row',

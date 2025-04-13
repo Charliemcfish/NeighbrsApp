@@ -26,6 +26,7 @@ import {
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
+import { calculateDistance, getReadableDistance } from '../../utils/locationService';
 
 const FindJobsScreen = ({ navigation, route }) => {
   const { initialTabName } = route.params || {};
@@ -34,10 +35,12 @@ const FindJobsScreen = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [userJobTypes, setUserJobTypes] = useState([]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   
   // Filter states
   const [selectedJobTypes, setSelectedJobTypes] = useState([]);
   const [minPaymentAmount, setMinPaymentAmount] = useState('');
+  const [maxDistance, setMaxDistance] = useState('');
   const [paymentTypeFilter, setPaymentTypeFilter] = useState({
     fixed: true,
     tip: true,
@@ -66,26 +69,33 @@ const FindJobsScreen = ({ navigation, route }) => {
   }, [initialTabName, route.params]);
 
   useEffect(() => {
-    const getUserJobTypes = async () => {
+    const loadUserData = async () => {
       try {
         const user = auth.currentUser;
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
+            
+            // Get user's job types for filtering
             if (userData.jobTypes) {
               setUserJobTypes(userData.jobTypes);
               // Initially set all user job types as selected
               setSelectedJobTypes([...userData.jobTypes]);
             }
+            
+            // Get user's location for distance calculation
+            if (userData.location && userData.location.coordinates) {
+              setUserLocation(userData.location.coordinates);
+            }
           }
         }
       } catch (error) {
-        console.error('Error fetching user job types:', error);
+        console.error('Error fetching user data:', error);
       }
     };
 
-    getUserJobTypes();
+    loadUserData();
     loadJobs();
   }, [activeTab]);
 
@@ -147,20 +157,31 @@ const FindJobsScreen = ({ navigation, route }) => {
         }
       });
 
-      // Add user information for each job
+      // Add user information for each job and calculate distances
       const enhancedJobsList = await Promise.all(
         jobsList.map(async (job) => {
           try {
             const creatorDoc = await getDoc(doc(db, 'users', job.createdBy));
+            let distance = null;
+            
+            // Calculate distance if both user and job have location coordinates
+            if (userLocation && job.locationCoordinates) {
+              distance = calculateDistance(userLocation, job.locationCoordinates);
+            }
+            
             if (creatorDoc.exists()) {
               const creatorData = creatorDoc.data();
               return {
                 ...job,
                 creatorName: creatorData.fullName || 'Unknown User',
-                creatorImage: creatorData.profileImage || null
+                creatorImage: creatorData.profileImage || null,
+                distance: distance
               };
             }
-            return job;
+            return {
+              ...job,
+              distance: distance
+            };
           } catch (error) {
             console.error('Error getting job creator info:', error);
             return job;
@@ -201,6 +222,7 @@ const FindJobsScreen = ({ navigation, route }) => {
   const resetFilters = () => {
     setSelectedJobTypes([...userJobTypes]);
     setMinPaymentAmount('');
+    setMaxDistance('');
     setPaymentTypeFilter({
       fixed: true,
       tip: true,
@@ -234,7 +256,13 @@ const FindJobsScreen = ({ navigation, route }) => {
         (job.paymentType !== 'fixed') || 
         (job.paymentAmount >= parseFloat(minPaymentAmount || 0));
       
-      return matchesSearch && matchesJobTypes && matchesPaymentType && matchesMinPayment;
+      // Filter based on maximum distance
+      const matchesDistance = !filtersApplied || 
+        !maxDistance || 
+        !job.distance || 
+        job.distance.miles <= parseFloat(maxDistance);
+      
+      return matchesSearch && matchesJobTypes && matchesPaymentType && matchesMinPayment && matchesDistance;
     }
     
     // For current and completed tabs, show all jobs without filtering
@@ -259,6 +287,11 @@ const FindJobsScreen = ({ navigation, route }) => {
         <View style={styles.jobCardHeaderText}>
           <Text style={styles.jobTitle}>{item.title}</Text>
           <Text style={styles.jobCreator}>{item.creatorName}</Text>
+          {item.distance && (
+            <Text style={styles.distanceText}>
+              {getReadableDistance(item.distance)}
+            </Text>
+          )}
         </View>
       </View>
       
@@ -504,6 +537,49 @@ const FindJobsScreen = ({ navigation, route }) => {
                   Only applies to jobs with fixed payment amounts
                 </Text>
               </View>
+              
+              {/* Distance Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Maximum Distance (miles)</Text>
+                <TextInput
+                  style={styles.paymentInput}
+                  value={maxDistance}
+                  onChangeText={setMaxDistance}
+                  placeholder="Enter maximum distance"
+                  keyboardType="numeric"
+                />
+                {!userLocation && (
+                  <Text style={styles.locationWarning}>
+                    Note: You need to set your address in your profile for accurate distance calculations.
+                  </Text>
+                )}
+                <View style={styles.distancePresets}>
+                  <TouchableOpacity
+                    style={styles.distancePresetButton}
+                    onPress={() => setMaxDistance('5')}
+                  >
+                    <Text style={styles.distancePresetText}>5 mi</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.distancePresetButton}
+                    onPress={() => setMaxDistance('10')}
+                  >
+                    <Text style={styles.distancePresetText}>10 mi</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.distancePresetButton}
+                    onPress={() => setMaxDistance('25')}
+                  >
+                    <Text style={styles.distancePresetText}>25 mi</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.distancePresetButton}
+                    onPress={() => setMaxDistance('50')}
+                  >
+                    <Text style={styles.distancePresetText}>50 mi</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -659,6 +735,13 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     fontSize: 14,
     color: COLORS.textMedium,
+  },
+  distanceText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    marginTop: 2,
   },
   jobInfoRow: {
     flexDirection: 'row',
@@ -864,14 +947,40 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontStyle: 'italic',
   },
+  locationWarning: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.warning,
+    fontStyle: 'italic',
+    marginTop: 5,
+    marginBottom: 10,
+  },
+  distancePresets: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  distancePresetButton: {
+    backgroundColor: '#f0f7ff',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  distancePresetText: {
+    ...FONTS.body,
+    color: COLORS.primary,
+  },
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 10,
   },
   modalButton: {
-    flex: 1,
-    marginHorizontal: 5,
+    flex: 0.48,
   },
 });
 
