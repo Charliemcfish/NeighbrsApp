@@ -4,7 +4,6 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  TextInput, 
   TouchableOpacity, 
   ScrollView,
   Alert,
@@ -17,6 +16,7 @@ import { auth, db } from '../../firebase';
 import KeyboardAvoidingWrapper from '../../components/KeyboardAvoidingWrapper';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 
 // Default job types
@@ -34,10 +34,13 @@ const PostJobScreen = ({ navigation }) => {
   const [customJobType, setCustomJobType] = useState('');
   const [paymentType, setPaymentType] = useState('fixed'); // 'fixed', 'tip', 'free'
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [userLocation, setUserLocation] = useState(null);
-  const [userAddress, setUserAddress] = useState('');
+  const [locationData, setLocationData] = useState({
+    address: '',
+    coordinates: null
+  });
   const [loading, setLoading] = useState(false);
   const [jobTypeModalVisible, setJobTypeModalVisible] = useState(false);
+  const [addressError, setAddressError] = useState(null);
 
   // Load user's location from profile
   useEffect(() => {
@@ -52,10 +55,15 @@ const PostJobScreen = ({ navigation }) => {
           
           // Set the user's location data
           if (userData.location) {
-            setUserLocation(userData.location.coordinates);
-            setUserAddress(userData.location.address || userData.address);
+            setLocationData({
+              address: userData.location.address || userData.address || '',
+              coordinates: userData.location.coordinates || null
+            });
           } else if (userData.address) {
-            setUserAddress(userData.address);
+            setLocationData({
+              address: userData.address,
+              coordinates: null
+            });
           }
         }
       } catch (error) {
@@ -65,6 +73,14 @@ const PostJobScreen = ({ navigation }) => {
     
     loadUserProfile();
   }, []);
+
+  const handleAddressSelect = (place) => {
+    setLocationData({
+      address: place.address,
+      coordinates: place.coordinates
+    });
+    setAddressError(null);
+  };
 
   const handlePostJob = async () => {
     if (!title || !description) {
@@ -82,8 +98,8 @@ const PostJobScreen = ({ navigation }) => {
       return;
     }
 
-    if (!userAddress) {
-      Alert.alert('Error', 'We could not find your address. Please update your profile with a valid address.');
+    if (!locationData.address) {
+      setAddressError('Please select a valid location');
       return;
     }
 
@@ -102,8 +118,8 @@ const PostJobScreen = ({ navigation }) => {
         title,
         description,
         jobType: finalJobType,
-        location: userAddress,
-        locationCoordinates: userLocation || null,
+        location: locationData.address,
+        locationCoordinates: locationData.coordinates,
         paymentType,
         paymentAmount: paymentType === 'fixed' ? parseFloat(paymentAmount) : 0,
         createdBy: user.uid,
@@ -192,18 +208,14 @@ const PostJobScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            <View style={styles.jobLocationContainer}>
-              <Text style={styles.label}>Job Location</Text>
-              <Text style={styles.locationInfo}>
-                {userAddress || 'Address not available. Please update your profile.'}
-              </Text>
-              <TouchableOpacity 
-                style={styles.editLocationButton}
-                onPress={() => navigation.navigate('EditProfile', { userProfile: { address: userAddress } })}
-              >
-                <Text style={styles.editLocationText}>Edit in profile</Text>
-              </TouchableOpacity>
-            </View>
+            <AddressAutocomplete
+              label="Job Location"
+              value={locationData.address}
+              onSelect={handleAddressSelect}
+              placeholder="Enter job location"
+              required
+              error={addressError}
+            />
             
             <Input
               label="Description"
@@ -396,29 +408,6 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: '#999',
-  },
-  jobLocationContainer: {
-    marginBottom: 16,
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  locationInfo: {
-    ...FONTS.body,
-    fontSize: 16,
-    color: COLORS.textDark,
-    marginBottom: 10,
-  },
-  editLocationButton: {
-    alignSelf: 'flex-end',
-  },
-  editLocationText: {
-    ...FONTS.body,
-    fontSize: 14,
-    color: COLORS.primary,
-    textDecorationLine: 'underline',
   },
   paymentTypeContainer: {
     flexDirection: 'row',

@@ -3,7 +3,6 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  TextInput, 
   TouchableOpacity, 
   ScrollView, 
   Alert,
@@ -16,15 +15,19 @@ import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
-import { geocodeAddress } from '../utils/locationService';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const EditProfileScreen = ({ route, navigation }) => {
   const { userProfile } = route.params;
   const [fullName, setFullName] = useState(userProfile.fullName || '');
-  const [address, setAddress] = useState(userProfile.address || '');
+  const [locationData, setLocationData] = useState({
+    address: userProfile.address || '',
+    coordinates: userProfile.location?.coordinates || null
+  });
   const [aboutMe, setAboutMe] = useState(userProfile.aboutMe || '');
   const [profileImage, setProfileImage] = useState(userProfile.profileImage || null);
   const [loading, setLoading] = useState(false);
+  const [addressError, setAddressError] = useState(null);
 
   const pickImage = async () => {
     // Request permissions
@@ -51,9 +54,22 @@ const EditProfileScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleAddressSelect = (place) => {
+    setLocationData({
+      address: place.address,
+      coordinates: place.coordinates
+    });
+    setAddressError(null);
+  };
+
   const handleUpdateProfile = async () => {
-    if (!fullName || !address) {
+    if (!fullName) {
       Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (!locationData.address) {
+      setAddressError('Please select an address from the dropdown');
       return;
     }
 
@@ -66,26 +82,16 @@ const EditProfileScreen = ({ route, navigation }) => {
         throw new Error('User not authenticated');
       }
 
-      // Geocode the address if it's changed
-      let locationData = null;
-      if (address !== userProfile.address) {
-        locationData = await geocodeAddress(address);
-      }
-
       // Prepare updated profile data
       const updatedProfile = {
         fullName,
-        address: locationData?.formattedAddress || address,
+        address: locationData.address,
         aboutMe,
-      };
-
-      // Update location data if address was changed
-      if (locationData) {
-        updatedProfile.location = {
-          address: locationData.formattedAddress || address,
+        location: {
+          address: locationData.address,
           coordinates: locationData.coordinates
-        };
-      }
+        }
+      };
 
       // Only update profileImage if it's changed
       if (profileImage && profileImage !== userProfile.profileImage) {
@@ -147,12 +153,13 @@ const EditProfileScreen = ({ route, navigation }) => {
             required
           />
           
-          <Input
+          <AddressAutocomplete
             label="Address"
-            value={address}
-            onChangeText={setAddress}
+            value={locationData.address}
+            onSelect={handleAddressSelect}
             placeholder="Enter your address"
             required
+            error={addressError}
           />
           
           <Input

@@ -4,6 +4,10 @@ import axios from 'axios';
 const GEOCODING_API_KEY = 'AIzaSyBSsjSyuqr-psiiONPCmGVAfoVUBkldapQ'; // Replace with your actual API key
 
 export const geocodeAddress = async (address) => {
+  if (!address || address.trim() === '') {
+    throw new Error('Address cannot be empty');
+  }
+  
   try {
     const response = await axios.get(
       `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GEOCODING_API_KEY}`
@@ -19,10 +23,29 @@ export const geocodeAddress = async (address) => {
         formattedAddress: response.data.results[0].formatted_address
       };
     }
-    throw new Error('Geocoding failed: No results found');
+    
+    if (response.data.status === 'ZERO_RESULTS') {
+      throw new Error('No address found for the given input. Please try a more specific address.');
+    }
+    
+    if (response.data.status === 'REQUEST_DENIED') {
+      throw new Error('Geocoding request was denied. Please check your API key.');
+    }
+    
+    throw new Error(`Geocoding failed: ${response.data.status}`);
   } catch (error) {
     console.error('Geocoding error:', error);
-    throw error;
+    
+    // If error is from our throw statements above
+    if (error.message.includes('Geocoding failed') || 
+        error.message.includes('No address found') || 
+        error.message.includes('Address cannot be empty') ||
+        error.message.includes('Geocoding request was denied')) {
+      throw error;
+    }
+    
+    // General network or other error
+    throw new Error('Unable to geocode address. Please check your internet connection and try again.');
   }
 };
 
@@ -71,4 +94,3 @@ export const getReadableDistance = (distance, unit = 'miles') => {
   
   return `${value.toFixed(1)} ${unit} away`;
 };
-

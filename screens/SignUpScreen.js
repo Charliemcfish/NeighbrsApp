@@ -20,19 +20,23 @@ import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { COLORS, FONTS } from '../styles/theme';
-import { geocodeAddress } from '../utils/locationService';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [address, setAddress] = useState('');
+  const [locationData, setLocationData] = useState({
+    address: '',
+    coordinates: null
+  });
   const [aboutMe, setAboutMe] = useState('');
   const [profileImage, setProfileImage] = useState(null);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [wantToBeHelper, setWantToBeHelper] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [addressError, setAddressError] = useState(null);
 
   const pickImage = async () => {
     // Request permissions
@@ -59,10 +63,23 @@ const SignUpScreen = ({ navigation }) => {
     }
   };
 
+  const handleAddressSelect = (place) => {
+    setLocationData({
+      address: place.address,
+      coordinates: place.coordinates
+    });
+    setAddressError(null);
+  };
+
   const handleSignUp = async () => {
     // Validate inputs
-    if (!email || !password || !confirmPassword || !fullName || !address) {
+    if (!email || !password || !confirmPassword || !fullName) {
       Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (!locationData.address) {
+      setAddressError('Please select an address from the dropdown');
       return;
     }
 
@@ -83,17 +100,14 @@ const SignUpScreen = ({ navigation }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Geocode the address to get coordinates
-      const locationData = await geocodeAddress(address);
-
       // Prepare user data with location information
       const userData = {
         fullName,
         email,
-        address: locationData?.formattedAddress || address,
+        address: locationData.address,
         location: {
-          address: locationData?.formattedAddress || address,
-          coordinates: locationData?.coordinates || null
+          address: locationData.address,
+          coordinates: locationData.coordinates
         },
         aboutMe: aboutMe || "", // Use empty string instead of undefined
         isHelper: wantToBeHelper,
@@ -181,12 +195,13 @@ const SignUpScreen = ({ navigation }) => {
                 required
               />
               
-              <Input
+              <AddressAutocomplete
                 label="Address"
-                value={address}
-                onChangeText={setAddress}
+                value={locationData.address}
+                onSelect={handleAddressSelect}
                 placeholder="Enter your address"
                 required
+                error={addressError}
               />
               
               <Input
