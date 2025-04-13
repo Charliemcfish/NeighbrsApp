@@ -2,6 +2,10 @@ const admin = require('firebase-admin');
 const { faker } = require('@faker-js/faker');
 const axios = require('axios');
 
+// Baltimore coordinates
+const BALTIMORE_LAT = 39.2904;
+const BALTIMORE_LNG = -76.6122;
+
 // Custom data sets
 const ABOUT_ME_DESCRIPTIONS = [
   "Friendly neighbor who loves helping out in the community.",
@@ -64,22 +68,40 @@ const JOB_DESCRIPTIONS = {
   ]
 };
 
-const LOCATIONS = [
-  "123 Maple Street, Oakville, CA 94123",
-  "456 Pine Road, Willowbrook, CA 94456",
-  "789 Cedar Lane, Rivertown, CA 94789",
-  "321 Elm Avenue, Sunnyvale, CA 94321",
-  "654 Birch Court, Mountain View, CA 94654",
-  "987 Oak Drive, Palo Alto, CA 94987",
-  "246 Redwood Street, San Jose, CA 94246",
-  "135 Sycamore Boulevard, Santa Clara, CA 94135",
-  "864 Laurel Way, Campbell, CA 94864",
-  "579 Magnolia Place, Los Gatos, CA 94579"
+// Cities within 100 miles of Baltimore
+const SURROUNDING_LOCATIONS = [
+  // Pennsylvania
+  { name: "Philadelphia, PA", lat: 39.9526, lng: -75.1652, distance: 100 },
+  { name: "Harrisburg, PA", lat: 40.2732, lng: -76.8867, distance: 80 },
+  { name: "York, PA", lat: 39.9626, lng: -76.7277, distance: 50 },
+  { name: "Lancaster, PA", lat: 40.0379, lng: -76.3055, distance: 70 },
+  
+  // Delaware
+  { name: "Wilmington, DE", lat: 39.7447, lng: -75.5476, distance: 70 },
+  { name: "Dover, DE", lat: 39.1582, lng: -75.5244, distance: 90 },
+  
+  // Maryland (outside Baltimore metro)
+  { name: "Frederick, MD", lat: 39.4142, lng: -77.4105, distance: 50 },
+  { name: "Annapolis, MD", lat: 38.9784, lng: -76.4922, distance: 30 },
+  { name: "Cumberland, MD", lat: 39.6515, lng: -78.7606, distance: 150 },
+  { name: "Salisbury, MD", lat: 38.3607, lng: -75.5994, distance: 130 },
+  
+  // West Virginia
+  { name: "Martinsburg, WV", lat: 39.4558, lng: -77.9642, distance: 100 },
+  
+  // Virginia
+  { name: "Winchester, VA", lat: 39.1838, lng: -78.1653, distance: 100 },
+  { name: "Richmond, VA", lat: 37.5407, lng: -77.4360, distance: 160 },
+  { name: "Norfolk, VA", lat: 36.8529, lng: -76.2858, distance: 200 },
+  
+  // Washington D.C. area
+  { name: "Arlington, VA", lat: 38.8816, lng: -77.0910, distance: 40 }
 ];
 
-// Initialize Firebase Admin SDK (you'll need to download a service account key)
+// Initialize Firebase Admin SDK
+const serviceAccount = require('./service_account_key.json');
 admin.initializeApp({
-  credential: admin.credential.cert(require('./service_account_key.json'))
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
@@ -95,61 +117,118 @@ async function generateProfilePicture() {
   }
 }
 
-async function generateHelperProfiles() {
-  const helpers = [];
+function generateAddress(location) {
+  // Generate a random street number for the given location
+  const streetNumber = faker.number.int({ min: 100, max: 9999 });
+  const streetName = faker.location.street();
   
-  for (let i = 0; i < 10; i++) {
+  return `${streetNumber} ${streetName}, ${location.name}`;
+}
+
+async function generateProfiles(isHelper, localCount, surroundingCount) {
+  const profiles = [];
+  
+  // First generate local Baltimore profiles
+  const BALTIMORE_LOCATIONS = [
+    "1400 N Charles St, Baltimore, MD 21201",
+    "2401 Maryland Ave, Baltimore, MD 21218",
+    "3100 St Paul St, Baltimore, MD 21218",
+    "2700 N Charles St, Baltimore, MD 21218",
+    "1600 Cathedral St, Baltimore, MD 21201",
+    "1800 Eutaw Pl, Baltimore, MD 21217",
+    "2100 Calvert St, Baltimore, MD 21218",
+    "3400 Greenmount Ave, Baltimore, MD 21218",
+    "2600 N Howard St, Baltimore, MD 21216",
+    "1300 W 41st St, Baltimore, MD 21211",
+    "4100 Roland Ave, Baltimore, MD 21211",
+    "3800 Canterbury Rd, Baltimore, MD 21218",
+    "2500 Cold Spring Ln, Baltimore, MD 21214",
+    "1100 E 33rd St, Baltimore, MD 21218",
+    "2700 Hampden Ave, Baltimore, MD 21211"
+  ];
+
+  // Local Baltimore profiles
+  for (let i = 0; i < localCount; i++) {
     const profilePicture = await generateProfilePicture();
     
-    const helper = {
+    const profile = {
       fullName: faker.person.fullName(),
       email: faker.internet.email(),
       password: 'TestUser123!',
-      address: LOCATIONS[i],
-      aboutMe: ABOUT_ME_DESCRIPTIONS[faker.number.int({ min: 0, max: ABOUT_ME_DESCRIPTIONS.length - 1 })],
-      isHelper: true,
+      address: BALTIMORE_LOCATIONS[i],
+      aboutMe: faker.helpers.arrayElement(ABOUT_ME_DESCRIPTIONS),
+      isHelper: isHelper,
       profileImage: profilePicture,
-      jobTypes: faker.helpers.arrayElements(Object.keys(JOB_TITLES), { min: 1, max: 3 }),
-      helpDescription: ABOUT_ME_DESCRIPTIONS[faker.number.int({ min: 0, max: ABOUT_ME_DESCRIPTIONS.length - 1 })],
-      bankInfo: {
+      location: {
+        address: BALTIMORE_LOCATIONS[i],
+        coordinates: {
+          latitude: BALTIMORE_LAT,
+          longitude: BALTIMORE_LNG
+        }
+      }
+    };
+
+    // Add helper-specific fields if it's a helper profile
+    if (isHelper) {
+      profile.jobTypes = faker.helpers.arrayElements(Object.keys(JOB_TITLES), { min: 1, max: 3 });
+      profile.helpDescription = faker.helpers.arrayElement(ABOUT_ME_DESCRIPTIONS);
+      profile.bankInfo = {
         accountName: faker.person.fullName(),
         accountNumber: faker.finance.accountNumber(),
         routingNumber: faker.finance.routingNumber()
-      }
-    };
+      };
+    }
     
-    helpers.push(helper);
+    profiles.push(profile);
   }
-  
-  return helpers;
-}
 
-async function generateNeighborProfiles() {
-  const neighbors = [];
-  
-  for (let i = 0; i < 10; i++) {
+  // Surrounding area profiles
+  for (let i = 0; i < surroundingCount; i++) {
+    const location = SURROUNDING_LOCATIONS[i];
     const profilePicture = await generateProfilePicture();
     
-    const neighbor = {
+    const profile = {
       fullName: faker.person.fullName(),
       email: faker.internet.email(),
       password: 'TestUser123!',
-      address: LOCATIONS[i],
-      aboutMe: ABOUT_ME_DESCRIPTIONS[faker.number.int({ min: 0, max: ABOUT_ME_DESCRIPTIONS.length - 1 })],
-      isHelper: false,
-      profileImage: profilePicture
+      address: generateAddress(location),
+      aboutMe: faker.helpers.arrayElement(ABOUT_ME_DESCRIPTIONS),
+      isHelper: isHelper,
+      profileImage: profilePicture,
+      location: {
+        address: generateAddress(location),
+        coordinates: {
+          latitude: location.lat,
+          longitude: location.lng
+        }
+      }
     };
+
+    // Add helper-specific fields if it's a helper profile
+    if (isHelper) {
+      profile.jobTypes = faker.helpers.arrayElements(Object.keys(JOB_TITLES), { min: 1, max: 3 });
+      profile.helpDescription = faker.helpers.arrayElement(ABOUT_ME_DESCRIPTIONS);
+      profile.bankInfo = {
+        accountName: faker.person.fullName(),
+        accountNumber: faker.finance.accountNumber(),
+        routingNumber: faker.finance.routingNumber()
+      };
+    }
     
-    neighbors.push(neighbor);
+    profiles.push(profile);
   }
   
-  return neighbors;
+  return profiles;
 }
 
-function generateJobPostings(neighborIds) {
+// Modify the job generation to handle the new location structure
+function generateJobPostings(neighborIds, profiles) {
   const jobs = [];
   
-  neighborIds.forEach(neighborId => {
+  neighborIds.forEach((neighborId, index) => {
+    // Get the profile for this neighbor
+    const neighborProfile = profiles[index];
+    
     // Create 1-3 jobs per neighbor
     const jobCount = faker.number.int({ min: 1, max: 3 });
     
@@ -161,7 +240,8 @@ function generateJobPostings(neighborIds) {
         title: faker.helpers.arrayElement(JOB_TITLES[jobType]),
         description: faker.helpers.arrayElement(JOB_DESCRIPTIONS[jobType]),
         jobType: jobType,
-        location: LOCATIONS[faker.number.int({ min: 0, max: LOCATIONS.length - 1 })],
+        location: neighborProfile.address,
+        locationCoordinates: neighborProfile.location.coordinates,
         paymentType: paymentType,
         paymentAmount: paymentType === 'fixed' ? faker.number.int({ min: 10, max: 200 }) : 0,
         createdBy: neighborId,
@@ -181,8 +261,8 @@ function generateJobPostings(neighborIds) {
 // Main function to populate the app
 async function populateApp() {
   try {
-    // Generate helper profiles
-    const helpers = await generateHelperProfiles();
+    // Generate helper profiles (15 total: 8 local, 7 surrounding)
+    const helpers = await generateProfiles(true, 8, 7);
     const helperIds = [];
     
     // Create helper users
@@ -202,8 +282,8 @@ async function populateApp() {
       helperIds.push(userRecord.uid);
     }
     
-    // Generate neighbor profiles
-    const neighbors = await generateNeighborProfiles();
+    // Generate neighbor profiles (15 total: 8 local, 7 surrounding)
+    const neighbors = await generateProfiles(false, 8, 7);
     const neighborIds = [];
     
     // Create neighbor users
@@ -224,7 +304,7 @@ async function populateApp() {
     }
     
     // Generate and post job listings for neighbors
-    const jobs = generateJobPostings(neighborIds);
+    const jobs = generateJobPostings(neighborIds, neighbors);
     
     // Add jobs to Firestore
     for (const job of jobs) {

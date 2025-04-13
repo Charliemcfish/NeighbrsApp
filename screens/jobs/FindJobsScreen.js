@@ -345,35 +345,7 @@ const FindJobsScreen = ({ navigation, route }) => {
         <Text style={styles.headerTitle}>Find Jobs</Text>
       </View>
       
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'available' && styles.activeTab]}
-          onPress={() => setActiveTab('available')}
-        >
-          <Text style={[styles.tabText, activeTab === 'available' && styles.activeTabText]}>
-            Available
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'current' && styles.activeTab]}
-          onPress={() => setActiveTab('current')}
-        >
-          <Text style={[styles.tabText, activeTab === 'current' && styles.activeTabText]}>
-            Current
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            Completed
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Tabs remain the same */}
       
       {/* Search box - only show for available jobs */}
       {activeTab === 'available' && (
@@ -401,6 +373,13 @@ const FindJobsScreen = ({ navigation, route }) => {
             )}
           </TouchableOpacity>
         </View>
+      )}
+      
+      {/* Add jobs count display */}
+      {activeTab === 'available' && (
+        <Text style={styles.resultCountText}>
+          {filteredJobs.length} Job{filteredJobs.length !== 1 ? 's' : ''} Found
+        </Text>
       )}
       
       {loading ? (
@@ -606,6 +585,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  resultCountText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 10,
   },
   header: {
     backgroundColor: COLORS.primary,

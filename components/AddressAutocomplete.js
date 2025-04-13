@@ -11,14 +11,15 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import { COLORS, FONTS } from '../styles/theme';
+import { Ionicons } from '@expo/vector-icons';
 
-const GOOGLE_PLACES_API_KEY = 'AIzaSyBSsjSyuqr-psiiONPCmGVAfoVUBkldapQ'; // Replace with your actual API key
+const GOOGLE_PLACES_API_KEY = 'AIzaSyBSsjSyuqr-psiiONPCmGVAfoVUBkldapQ';
 
 const AddressAutocomplete = ({ 
   value,
   onSelect,
   label,
-  placeholder = "Enter an address",
+  placeholder = "Enter a US address or ZIP code",
   required = false,
   style,
   error,
@@ -27,41 +28,75 @@ const AddressAutocomplete = ({
   const [predictions, setPredictions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [debounceTimer, setDebounceTimer] = useState(null);
 
   useEffect(() => {
-    // Update address when value prop changes
     if (value !== address) {
       setAddress(value || '');
     }
   }, [value]);
 
   const getPredictions = async (text) => {
+    // Clear any existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
     setAddress(text);
     
-    if (!text || text.length < 3) {
+    // Ensure text is not empty and has at least 2 characters
+    if (!text || text.length < 2) {
       setPredictions([]);
       setShowDropdown(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
-      setShowDropdown(true);
-      
-      const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-          text
-        )}&key=${GOOGLE_PLACES_API_KEY}&types=address&components=country:uk`
-      );
-      
-      if (response.data.predictions) {
-        setPredictions(response.data.predictions);
+    // Set a new debounce timer
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true);
+        
+        const response = await axios.get(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+            text
+          )}&key=${GOOGLE_PLACES_API_KEY}&types=address&components=country:us`
+        );
+        
+        if (response.data.predictions && response.data.predictions.length > 0) {
+          setPredictions(response.data.predictions);
+          setShowDropdown(true);
+        } else {
+          // If no predictions, and input looks like a ZIP code, do a more specific search
+          const zipCodeRegex = /^\d{5}(-\d{4})?$/;
+          if (zipCodeRegex.test(text.replace(/\s/g, ''))) {
+            const zipResponse = await axios.get(
+              `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+                text + ', US'
+              )}&key=${GOOGLE_PLACES_API_KEY}&types=address&components=country:us`
+            );
+            
+            if (zipResponse.data.predictions && zipResponse.data.predictions.length > 0) {
+              setPredictions(zipResponse.data.predictions);
+              setShowDropdown(true);
+            } else {
+              setPredictions([]);
+              setShowDropdown(false);
+            }
+          } else {
+            setPredictions([]);
+            setShowDropdown(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching address predictions:', error);
+        setPredictions([]);
+        setShowDropdown(false);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching address predictions:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    }, 300); // 300ms delay to reduce API calls
+
+    setDebounceTimer(timer);
   };
 
   const getPlaceDetails = async (placeId) => {
@@ -109,15 +144,37 @@ const AddressAutocomplete = ({
       )}
       
       <View style={[styles.inputContainer, error && styles.errorInput]}>
+        <Ionicons 
+          name="location-outline" 
+          size={20} 
+          color={error ? COLORS.error : COLORS.primary} 
+          style={styles.locationIcon} 
+        />
         <TextInput
           style={styles.input}
           value={address}
           onChangeText={getPredictions}
           placeholder={placeholder}
           placeholderTextColor="#999999"
+          autoCorrect={false}
+          autoComplete="off"
+          textContentType="none"
         />
-        {isLoading && (
+        {isLoading ? (
           <ActivityIndicator size="small" color={COLORS.primary} style={styles.loader} />
+        ) : (
+          address.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => {
+                setAddress('');
+                setPredictions([]);
+                setShowDropdown(false);
+              }}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          )
         )}
       </View>
       
@@ -148,71 +205,79 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
     width: '100%',
-    zIndex: 1, // Ensure dropdown appears above other elements
+    zIndex: 1,
   },
   label: {
-    fontFamily: 'Barlow-Medium',
+    ...FONTS.subheading,
     fontSize: 16,
     marginBottom: 6,
-    color: '#333333',
+    color: COLORS.textDark,
   },
   required: {
-    color: '#FF0000',
+    color: COLORS.error,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: '#DDDDDD',
+    borderColor: COLORS.border,
     borderRadius: 30,
-    overflow: 'hidden',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  locationIcon: {
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    fontFamily: 'Montserrat-Regular',
+    ...FONTS.body,
     fontSize: 16,
-    color: '#333333',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    color: COLORS.textDark,
   },
   loader: {
-    marginRight: 15,
+    marginLeft: 10,
+  },
+  clearButton: {
+    marginLeft: 10,
   },
   dropdown: {
-    backgroundColor: 'white',
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: '#DDDDDD',
+    borderColor: COLORS.border,
     borderRadius: 10,
-    marginTop: 5,
     maxHeight: 200,
+    zIndex: 10,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    zIndex: 2,
   },
   predictionItem: {
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: COLORS.border,
   },
   predictionText: {
-    fontFamily: 'Montserrat-Regular',
-    fontSize: 14,
-    color: '#333333',
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
   },
   errorInput: {
-    borderColor: '#FF0000',
+    borderColor: COLORS.error,
   },
   errorText: {
-    fontFamily: 'Montserrat-Regular',
-    color: '#FF0000',
+    ...FONTS.body,
+    color: COLORS.error,
     fontSize: 14,
-    marginTop: 4,
-    marginLeft: 4,
-  },
+    marginTop: 5,
+    marginLeft: 5,
+  }
 });
 
 export default AddressAutocomplete;

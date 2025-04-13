@@ -206,28 +206,34 @@ const BrowseHelpersScreen = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Find Helpers</Text>
-        <View style={{ width: 40 }} /> {/* Empty view for spacing */}
-      </View>
-      
-      <View style={styles.searchFiltersContainer}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={COLORS.primary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search helpers by name..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+ 
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={COLORS.white} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Find Helpers</Text>
+          <View style={{ width: 40 }} /> {/* Empty view for spacing */}
         </View>
+        
+        <View style={styles.searchFiltersContainer}>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color={COLORS.primary} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search helpers by name..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          
+          {/* Add helpers count display */}
+          <Text style={styles.resultCountText}>
+            {filteredHelpers.length} Helper{filteredHelpers.length !== 1 ? 's' : ''} Found
+          </Text>
         
         <View style={styles.filtersRow}>
           <TouchableOpacity 
@@ -481,6 +487,14 @@ const styles = StyleSheet.create({
     height: 50,
     marginBottom: 10,
     ...SHADOWS.small,
+  },
+  resultCountText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 10,
   },
   searchIcon: {
     marginRight: 10,
