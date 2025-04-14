@@ -246,8 +246,157 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  // The rest of the functions (handleAcceptOffer, handleStartJob, etc.) remain the same...
+  const handleAcceptOffer = async (offer) => {
+    try {
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'accepted',
+        helperAssigned: offer.userId,
+        acceptedAt: new Date(),
+      });
 
+      Alert.alert(
+        'Success',
+        'Offer accepted! The helper has been assigned to your job.',
+        [
+          {
+            text: 'OK',
+            onPress: () => loadJobDetails()
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleStartJob = async () => {
+    try {
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'in-progress',
+        startedAt: new Date(),
+      });
+  
+      Alert.alert(
+        'Job started!',
+        'You have successfully started this job.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back to dashboard after confirming
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              });
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleCompleteJob = async () => {
+    try {
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      Alert.alert(
+        'Success',
+        'Job marked as completed!',
+        [
+          {
+            text: 'OK',
+            onPress: () => loadJobDetails()
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    Alert.alert(
+      'Cancel Job',
+      'Are you sure you want to cancel this job?',
+      [
+        {
+          text: 'No',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, 'jobs', jobId), {
+                status: 'cancelled',
+                cancelledAt: new Date(),
+              });
+
+              Alert.alert(
+                'Success',
+                'Job has been cancelled',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => loadJobDetails()
+                  }
+                ]
+              );
+            } catch (error) {
+              Alert.alert('Error', error.message);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleOpenChat = async (otherUserId) => {
+    try {
+      // First check if a chat exists for this job
+      const chatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', auth.currentUser.uid)
+      );
+      
+      const querySnapshot = await getDocs(chatsQuery);
+      let existingChatId = null;
+      
+      // Look for a chat with this job ID and the other user
+      querySnapshot.forEach((doc) => {
+        const chatData = doc.data();
+        if (chatData.jobId === jobId && chatData.participants.includes(otherUserId)) {
+          existingChatId = doc.id;
+        }
+      });
+      
+      // Navigate to the chat
+      navigation.navigate('Messages', { 
+        screen: 'ChatDetails',
+        params: { 
+          chatId: existingChatId, // Will be null if no chat exists yet
+          otherUserId: otherUserId,
+          jobId: jobId
+        } 
+      });
+    } catch (error) {
+      console.error("Error finding chat:", error);
+      // Fallback to just passing the other user ID
+      navigation.navigate('Messages', { 
+        screen: 'ChatDetails',
+        params: { 
+          otherUserId: otherUserId,
+          jobId: jobId
+        } 
+      });
+    }
+  };
+  
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
