@@ -1,5 +1,5 @@
 // screens/jobs/JobDetailsScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -23,13 +23,16 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  addDoc
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { calculateDistance, getReadableDistance } from '../../utils/locationService';
+import ReviewModal from '../../components/ReviewModal';
+import StarRating from '../../components/StarRating';
 
 const JobDetailsScreen = ({ route, navigation }) => {
   const { jobId, userType } = route.params;
@@ -45,6 +48,12 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [toastOpacity] = useState(new Animated.Value(0));
   const [offersWithHelpers, setOffersWithHelpers] = useState([]);
   const [distance, setDistance] = useState(null);
+  
+  // Review-related state
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [isReviewingHelper, setIsReviewingHelper] = useState(false);
+  const [showFeedbackButton, setShowFeedbackButton] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     loadJobDetails();
@@ -81,6 +90,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         setUserProfile(userData);
+        setCurrentUser(userData);
         
         // Calculate distance if both user and job have location coordinates
         if (userData.location?.coordinates && jobData.locationCoordinates) {
@@ -182,6 +192,24 @@ const JobDetailsScreen = ({ route, navigation }) => {
           setHasOffered(true);
           setOfferAmount(userOffer.amount.toString());
           setOfferNote(userOffer.note);
+        }
+      }
+
+      // Check if the current user can leave a review
+      if (jobData.status === 'completed') {
+        const isCreator = user.uid === jobData.createdBy;
+        const isHelper = jobData.helperAssigned === user.uid;
+        
+        // If creator hasn't left a review for helper yet
+        if (isCreator && !jobData.helperRating) {
+          setIsReviewingHelper(true);
+          setShowFeedbackButton(true);
+        }
+        
+        // If helper hasn't left a review for creator yet
+        if (isHelper && !jobData.creatorRating) {
+          setIsReviewingHelper(false);
+          setShowFeedbackButton(true);
         }
       }
 
@@ -304,18 +332,65 @@ const JobDetailsScreen = ({ route, navigation }) => {
         completedAt: new Date(),
       });
 
+      // Determine who should be reviewed
+      // If I'm the job creator, I should review the helper
+      // If I'm the helper, I should review the job creator
+      const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+      setIsReviewingHelper(shouldReviewHelper);
+      setReviewModalVisible(true);
+      
+      // We'll update the job status, but won't show success alert until after review
+      loadJobDetails();
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleSubmitReview = async (rating, comment) => {
+    try {
+      const reviewData = {
+        rating,
+        comment,
+        jobId: job.id,
+        jobTitle: job.title,
+        reviewerUid: auth.currentUser.uid,
+        reviewerName: currentUser?.fullName || 'Unknown User',
+        reviewedUid: isReviewingHelper ? job.helperAssigned : job.createdBy,
+        createdAt: new Date(),
+      };
+      
+      // Add review to the reviews collection
+      await addDoc(collection(db, 'reviews'), reviewData);
+      
+      // Also update the job with the rating
+      if (isReviewingHelper) {
+        await updateDoc(doc(db, 'jobs', jobId), {
+          helperRating: rating,
+          helperReview: comment
+        });
+      } else {
+        await updateDoc(doc(db, 'jobs', jobId), {
+          creatorRating: rating,
+          creatorReview: comment
+        });
+      }
+      
+      // Hide the feedback button after submission
+      setShowFeedbackButton(false);
+      
       Alert.alert(
-        'Success',
-        'Job marked as completed!',
+        'Thank You!',
+        'Your review has been submitted successfully.',
         [
           {
             text: 'OK',
-            onPress: () => loadJobDetails()
+            onPress: () => setReviewModalVisible(false)
           }
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error submitting review:', error);
+      Alert.alert('Error', 'Failed to submit review. Please try again.');
     }
   };
 
@@ -395,6 +470,10 @@ const JobDetailsScreen = ({ route, navigation }) => {
         } 
       });
     }
+  };
+
+  const handleViewNeighborProfile = () => {
+    navigation.navigate('NeighborProfile', { neighborId: job.createdBy });
   };
   
   if (loading) {
@@ -507,6 +586,36 @@ const JobDetailsScreen = ({ route, navigation }) => {
           <Text style={styles.descriptionText}>{job.description}</Text>
         </View>
         
+        {/* Job Poster Profile Section */}
+        {!isCreator && (
+          <View style={styles.posterProfileContainer}>
+            <Text style={styles.sectionTitle}>Job Posted By</Text>
+            <View style={styles.posterInfo}>
+              {creatorProfile?.profileImage ? (
+                <Image
+                  source={{ uri: creatorProfile.profileImage }}
+                  style={styles.posterImage}
+                />
+              ) : (
+                <View style={styles.posterImagePlaceholder}>
+                  <Text style={styles.posterImagePlaceholderText}>
+                    {creatorProfile?.fullName ? creatorProfile.fullName.charAt(0).toUpperCase() : '?'}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.posterName}>
+                {creatorProfile?.fullName || 'Unknown User'}
+              </Text>
+            </View>
+            <Button 
+              title="View Neighbor Profile"
+              size="small"
+              onPress={handleViewNeighborProfile}
+              style={styles.viewNeighborButton}
+            />
+          </View>
+        )}
+        
         {/* Helper assigned section */}
         {job.helperAssigned && (
           <View style={styles.helperAssignedContainer}>
@@ -537,6 +646,41 @@ const JobDetailsScreen = ({ route, navigation }) => {
                 onPress={() => navigation.navigate('HelperProfile', { helperId: job.helperAssigned })}
                 style={styles.viewHelperButton}
               />
+            )}
+          </View>
+        )}
+        
+        {/* Reviews Section - Display if job is completed */}
+        {job.status === 'completed' && (
+          <View style={styles.reviewsContainer}>
+            <Text style={styles.sectionTitle}>Reviews</Text>
+            
+            {job.helperRating && (
+              <View style={styles.reviewItem}>
+                <View style={styles.reviewHeader}>
+                  <Text style={styles.reviewLabel}>Helper Rating:</Text>
+                  <StarRating rating={job.helperRating} disabled size={16} />
+                </View>
+                {job.helperReview && (
+                  <Text style={styles.reviewText}>{job.helperReview}</Text>
+                )}
+              </View>
+            )}
+            
+            {job.creatorRating && (
+              <View style={styles.reviewItem}>
+                <View style={styles.reviewHeader}>
+                  <Text style={styles.reviewLabel}>Job Poster Rating:</Text>
+                  <StarRating rating={job.creatorRating} disabled size={16} />
+                </View>
+                {job.creatorReview && (
+                  <Text style={styles.reviewText}>{job.creatorReview}</Text>
+                )}
+              </View>
+            )}
+            
+            {!job.helperRating && !job.creatorRating && (
+              <Text style={styles.noReviewsText}>No reviews yet</Text>
             )}
           </View>
         )}
@@ -716,8 +860,28 @@ const JobDetailsScreen = ({ route, navigation }) => {
               size="large"
             />
           )}
+          
+          {/* Button to give feedback for completed jobs */}
+          {job.status === 'completed' && showFeedbackButton && (
+            <Button 
+              title={`Rate ${isReviewingHelper ? 'Helper' : 'Neighbor'}`}
+              icon="star"
+              onPress={() => setReviewModalVisible(true)}
+              style={styles.feedbackButton}
+              size="large"
+            />
+          )}
         </View>
       </View>
+      
+      {/* Review Modal */}
+      <ReviewModal
+        visible={reviewModalVisible}
+        onClose={() => setReviewModalVisible(false)}
+        onSubmit={handleSubmitReview}
+        title={`Rate Your ${isReviewingHelper ? 'Helper' : 'Neighbor'}`}
+        recipient={isReviewingHelper ? helperProfile?.fullName : creatorProfile?.fullName}
+      />
       
       {Platform.OS === 'ios' && toastVisible && (
         <Animated.View 
@@ -935,6 +1099,47 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: COLORS.textDark,
   },
+  posterProfileContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
+  },
+  posterInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  posterImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 15,
+  },
+  posterImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  posterImagePlaceholderText: {
+    ...FONTS.bodyBold,
+    fontSize: 20,
+    color: COLORS.white,
+  },
+  posterName: {
+    ...FONTS.subheading,
+    fontSize: 16,
+    color: COLORS.textDark,
+  },
+  viewNeighborButton: {
+    alignSelf: 'flex-end',
+  },
   helperAssignedContainer: {
     backgroundColor: COLORS.white, // Changed from background to white
     borderRadius: 15,
@@ -982,6 +1187,44 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
     color: COLORS.textDark,
+  },
+  reviewsContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eaeaea',
+  },
+  reviewItem: {
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reviewLabel: {
+    ...FONTS.bodyBold,
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginRight: 10,
+  },
+  reviewText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textDark,
+    lineHeight: 20,
+  },
+  noReviewsText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   offersContainer: {
     marginBottom: 20,
@@ -1102,6 +1345,11 @@ const styles = StyleSheet.create({
   },
   chatActionButton: {
     backgroundColor: COLORS.info,
+    marginBottom: 10,
+  },
+  feedbackButton: {
+    backgroundColor: '#FFB800', // Golden color for feedback button
+    marginBottom: 10,
   },
   toast: {
     position: 'absolute',

@@ -15,6 +15,8 @@ import HomeScreen from './screens/HomeScreen';
 import EditProfileScreen from './screens/EditProfileScreen';  
 import BrowseHelpersScreen from './screens/helpers/BrowseHelpersScreen';
 import HelperProfileScreen from './screens/helpers/HelperProfileScreen';
+import NeighborProfileScreen from './screens/NeighborProfileScreen';
+import ReviewsListScreen from './screens/ReviewsListScreen';
 import FeedbackScreen from './screens/FeedbackScreen';
 
 const Stack = createStackNavigator();
@@ -67,6 +69,8 @@ const Navigation = () => {
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="BrowseHelpers" component={BrowseHelpersScreen} />
         <Stack.Screen name="HelperProfile" component={HelperProfileScreen} />
+        <Stack.Screen name="NeighborProfile" component={NeighborProfileScreen} />
+        <Stack.Screen name="ReviewsList" component={ReviewsListScreen} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} />
       </Stack.Navigator>
     </NavigationContainer>

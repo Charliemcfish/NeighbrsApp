@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  TextInput
+  TextInput,
+  FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -22,12 +23,14 @@ import {
   where, 
   getDocs,
   updateDoc,
+  orderBy,
   serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
+import StarRating from '../../components/StarRating';
 
 const HelperProfileScreen = ({ route, navigation }) => {
   const { helperId } = route.params;
@@ -36,6 +39,8 @@ const HelperProfileScreen = ({ route, navigation }) => {
   const [requestModalVisible, setRequestModalVisible] = useState(false);
   const [completedJobs, setCompletedJobs] = useState([]);
   const [rating, setRating] = useState(0);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
   
   // Direct request form fields
   const [jobTitle, setJobTitle] = useState('');
@@ -47,7 +52,6 @@ const HelperProfileScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     loadHelperProfile();
-    loadCompletedJobs();
   }, [helperId]);
 
   const loadHelperProfile = async () => {
@@ -59,18 +63,43 @@ const HelperProfileScreen = ({ route, navigation }) => {
       } else {
         Alert.alert('Error', 'Helper profile not found');
         navigation.goBack();
+        return;
       }
-    } catch (error) {
-      console.error('Error loading helper profile:', error);
-      Alert.alert('Error', 'Could not load helper profile');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const loadCompletedJobs = async () => {
-    try {
-      // Query for completed jobs where this helper was assigned
+      // Get reviews for this helper
+      try {
+        // Get the helper reviews from the reviews collection
+        const reviewsQuery = query(
+          collection(db, 'reviews'),
+          where('reviewedUid', '==', helperId),
+          orderBy('createdAt', 'desc')
+        );
+        
+        const reviewsSnapshot = await getDocs(reviewsQuery);
+        const reviewsList = [];
+        let totalRating = 0;
+        
+        reviewsSnapshot.forEach((doc) => {
+          const reviewData = doc.data();
+          reviewsList.push({
+            id: doc.id,
+            ...reviewData,
+            createdAt: reviewData.createdAt.toDate()
+          });
+          totalRating += reviewData.rating;
+        });
+        
+        setReviews(reviewsList);
+        
+        // Calculate average rating
+        if (reviewsList.length > 0) {
+          setRating(totalRating / reviewsList.length);
+        }
+      } catch (error) {
+        console.error('Error getting helper reviews:', error);
+      }
+      
+      // Get completed jobs
       const jobsQuery = query(
         collection(db, 'jobs'),
         where('helperAssigned', '==', helperId),
@@ -79,8 +108,6 @@ const HelperProfileScreen = ({ route, navigation }) => {
 
       const querySnapshot = await getDocs(jobsQuery);
       const jobsData = [];
-      let totalRating = 0;
-      let ratingCount = 0;
 
       querySnapshot.forEach((doc) => {
         const job = doc.data();
@@ -88,22 +115,14 @@ const HelperProfileScreen = ({ route, navigation }) => {
           id: doc.id,
           ...job
         });
-
-        // Calculate average rating if available
-        if (job.helperRating) {
-          totalRating += job.helperRating;
-          ratingCount++;
-        }
       });
 
       setCompletedJobs(jobsData);
-      
-      // Set average rating
-      if (ratingCount > 0) {
-        setRating(totalRating / ratingCount);
-      }
     } catch (error) {
-      console.error('Error loading completed jobs:', error);
+      console.error('Error loading helper profile:', error);
+      Alert.alert('Error', 'Could not load helper profile');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -303,6 +322,37 @@ const HelperProfileScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleViewAllReviews = () => {
+    navigation.navigate('ReviewsList', { 
+      userId: helperId,
+      userName: helperProfile?.fullName || 'Helper'
+    });
+  };
+
+  const renderReviewItem = ({ item }) => (
+    <View style={styles.reviewItem}>
+      <View style={styles.reviewHeader}>
+        <Text style={styles.reviewerName}>{item.reviewerName}</Text>
+        <Text style={styles.reviewDate}>
+          {item.createdAt.toLocaleDateString()}
+        </Text>
+      </View>
+      
+      <View style={styles.reviewRating}>
+        <StarRating rating={item.rating} disabled size={16} />
+        <Text style={styles.ratingValue}>{item.rating.toFixed(1)}</Text>
+      </View>
+      
+      {item.comment && (
+        <Text style={styles.reviewComment}>{item.comment}</Text>
+      )}
+      
+      <Text style={styles.jobReference}>
+        Job: {item.jobTitle}
+      </Text>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -323,31 +373,6 @@ const HelperProfileScreen = ({ route, navigation }) => {
       </View>
     );
   }
-
-  // Render star rating
-  const renderStars = (rating) => {
-    const stars = [];
-    const fullStars = Math.floor(rating);
-    const halfStar = rating - fullStars >= 0.5;
-    
-    for (let i = 1; i <= 5; i++) {
-      if (i <= fullStars) {
-        stars.push(
-          <Ionicons key={i} name="star" size={18} color="#FFD700" />
-        );
-      } else if (i === fullStars + 1 && halfStar) {
-        stars.push(
-          <Ionicons key={i} name="star-half" size={18} color="#FFD700" />
-        );
-      } else {
-        stars.push(
-          <Ionicons key={i} name="star-outline" size={18} color="#FFD700" />
-        );
-      }
-    }
-    
-    return stars;
-  };
 
   return (
     <View style={styles.container}>
@@ -381,14 +406,18 @@ const HelperProfileScreen = ({ route, navigation }) => {
           <Text style={styles.helperLocation}>{helperProfile.address}</Text>
           
           <View style={styles.ratingContainer}>
-            <View style={styles.starsContainer}>
-              {renderStars(rating)}
-            </View>
+            <StarRating rating={rating} disabled />
             <Text style={styles.ratingText}>
-              {rating > 0 
-                ? `${rating.toFixed(1)} (${completedJobs.length} jobs)` 
-                : 'No ratings yet'}
+              {rating.toFixed(1)} ({reviews.length} reviews)
             </Text>
+            {reviews.length > 0 && (
+              <TouchableOpacity 
+                style={styles.viewReviewsButton}
+                onPress={() => setReviewsModalVisible(true)}
+              >
+                <Text style={styles.viewReviewsText}>View Feedback</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         
@@ -597,6 +626,51 @@ const HelperProfileScreen = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+      
+      {/* Reviews Modal */}
+      <Modal
+        visible={reviewsModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setReviewsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reviews</Text>
+              <TouchableOpacity onPress={() => setReviewsModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {reviews.length > 0 ? (
+              <FlatList
+                data={reviews.slice(0, 10)} // Show only the first 10 reviews
+                renderItem={renderReviewItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.reviewsList}
+                ListFooterComponent={
+                  reviews.length > 10 ? (
+                    <TouchableOpacity 
+                      style={styles.viewAllButton}
+                      onPress={handleViewAllReviews}
+                    >
+                      <Text style={styles.viewAllButtonText}>
+                        View All {reviews.length} Reviews
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
+            ) : (
+              <View style={styles.noReviewsContainer}>
+                <Ionicons name="star-outline" size={64} color={COLORS.textLight} />
+                <Text style={styles.noReviewsText}>No reviews yet</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -704,15 +778,25 @@ const styles = StyleSheet.create({
   },
   ratingContainer: {
     alignItems: 'center',
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    marginBottom: 5,
+    marginBottom: 15,
   },
   ratingText: {
     ...FONTS.body,
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.textDark,
+    marginTop: 5,
+  },
+  viewReviewsButton: {
+    marginTop: 10,
+    padding: 8,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 20,
+  },
+  viewReviewsText: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: 'bold',
   },
   section: {
     backgroundColor: COLORS.white,
@@ -872,6 +956,84 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 5,
   },
+  // Review-specific styles
+  reviewsList: {
+    paddingVertical: 10,
+  },
+  reviewItem: {
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  reviewerName: {
+    ...FONTS.bodyBold,
+    fontSize: 16,
+    color: COLORS.textDark,
+    fontWeight: 'bold',
+  },
+  reviewDate: {
+    ...FONTS.body,
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
+  reviewRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  ratingValue: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginLeft: 10,
+  },
+  reviewComment: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  jobReference: {
+    ...FONTS.body,
+    fontSize: 12,
+    color: COLORS.primary,
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
+  noReviewsContainer: {
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noReviewsText: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textMedium,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  viewAllButton: {
+    backgroundColor: COLORS.primaryLight,
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  viewAllButtonText: {
+    ...FONTS.bodyBold,
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  }
 });
 
 export default HelperProfileScreen;
+    
