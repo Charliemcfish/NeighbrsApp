@@ -46,6 +46,17 @@
       {
         "asset": "./assets/fonts/Montserrat-Bold.ttf"
       }
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "87fa2dd9-3200-4ccc-8f50-2b7f68a41ff4"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/87fa2dd9-3200-4ccc-8f50-2b7f68a41ff4"
+    }
   }
 }
