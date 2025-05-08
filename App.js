@@ -5,7 +5,11 @@ import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import Navigation from './navigation';
-import { loadFonts } from './utils/fontLoader';  // Correct relative path
+import { loadFonts } from './utils/fontLoader';
+import { LogBox } from 'react-native';
+import StripeProvider from './components/StripeProvider';
+
+LogBox.ignoreAllLogs();
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -55,9 +59,11 @@ export default function App() {
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <Navigation initialUser={user} />
-      <StatusBar style="auto" />
-    </View>
+    <StripeProvider>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <Navigation initialUser={user} />
+        <StatusBar style="auto" />
+      </View>
+    </StripeProvider>
   );
 }

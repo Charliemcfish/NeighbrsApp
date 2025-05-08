@@ -1,4 +1,4 @@
-// navigation.js
+// navigation.js - Updated with payment screens
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -18,6 +18,10 @@ import HelperProfileScreen from './screens/helpers/HelperProfileScreen';
 import NeighborProfileScreen from './screens/NeighborProfileScreen';
 import ReviewsListScreen from './screens/ReviewsListScreen';
 import FeedbackScreen from './screens/FeedbackScreen';
+
+// Import new payment screens
+import PaymentMethodScreen from './screens/PaymentMethodScreen';
+import ConnectAccountScreen from './screens/ConnectAccountScreen';
 
 const Stack = createStackNavigator();
 
@@ -72,6 +76,10 @@ const Navigation = () => {
         <Stack.Screen name="NeighborProfile" component={NeighborProfileScreen} />
         <Stack.Screen name="ReviewsList" component={ReviewsListScreen} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} />
+        
+        {/* Add new payment screens */}
+        <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
+        <Stack.Screen name="ConnectAccount" component={ConnectAccountScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

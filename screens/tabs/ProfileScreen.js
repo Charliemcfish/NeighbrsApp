@@ -1,4 +1,4 @@
-// screens/tabs/ProfileScreen.js - with fixed About Me text container
+// screens/tabs/ProfileScreen.js
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -17,6 +17,7 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
@@ -26,9 +27,13 @@ const ProfileScreen = ({ route, navigation }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [userType, setUserType] = useState(initialUserType || 'neighbor');
   const [loading, setLoading] = useState(true);
+  const [hasPaymentMethod, setHasPaymentMethod] = useState(false);
+  const [hasConnectAccount, setHasConnectAccount] = useState(false);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
 
   useEffect(() => {
     loadUserProfile();
+    checkPaymentStatus();
   }, []);
 
   const loadUserProfile = async () => {
@@ -50,6 +55,38 @@ const ProfileScreen = ({ route, navigation }) => {
       console.error('Error loading user profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkPaymentStatus = async () => {
+    try {
+      setCheckingPaymentStatus(true);
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      // Check if user has payment method set up
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setHasPaymentMethod(!!userData.hasPaymentMethod);
+      }
+      
+      // Check if helper has Connect account
+      if (userType === 'helper') {
+        try {
+          const functions = getFunctions();
+          const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
+          const result = await checkConnectStatus();
+          setHasConnectAccount(result.data.hasAccount);
+        } catch (error) {
+          console.error('Error checking Connect account:', error);
+          setHasConnectAccount(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+    } finally {
+      setCheckingPaymentStatus(false);
     }
   };
 
@@ -96,27 +133,6 @@ const ProfileScreen = ({ route, navigation }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    );
-  }
-
-  if (!userProfile) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Could not load user profile</Text>
-        <Button 
-          title="Sign Out" 
-          onPress={handleSignOut} 
-          style={styles.signOutButton}
-        />
-      </View>
-    );
-  }
-
   const handleEditProfile = () => {
     // Navigate to a new screen for profile editing
     navigation.navigate('EditProfile', { userProfile });
@@ -149,6 +165,27 @@ const ProfileScreen = ({ route, navigation }) => {
       ]
     );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (!userProfile) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Could not load user profile</Text>
+        <Button 
+          title="Sign Out" 
+          onPress={handleSignOut} 
+          style={styles.signOutButton}
+        />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -213,6 +250,58 @@ const ProfileScreen = ({ route, navigation }) => {
           </View>
         </View>
       )}
+      
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Payment Settings</Text>
+        
+        <View style={styles.paymentCard}>
+          <View style={styles.paymentRow}>
+            <View style={styles.paymentInfo}>
+              <Text style={styles.paymentLabel}>Payment Method</Text>
+              <Text style={styles.paymentStatus}>
+                {hasPaymentMethod ? 'Set up' : 'Not set up'}
+              </Text>
+            </View>
+            <Button
+              title={hasPaymentMethod ? "Update" : "Set Up"}
+              onPress={() => navigation.navigate('PaymentMethod')}
+              size="small"
+              style={styles.paymentButton}
+            />
+          </View>
+          
+          <Text style={styles.paymentDescription}>
+            {hasPaymentMethod ? 
+              'Your payment method is set up and ready to use for jobs.' : 
+              'Set up a payment method to pay for jobs.'}
+          </Text>
+          
+          {userType === 'helper' && (
+            <>
+              <View style={[styles.paymentRow, {marginTop: 20}]}>
+                <View style={styles.paymentInfo}>
+                  <Text style={styles.paymentLabel}>Payment Account</Text>
+                  <Text style={styles.paymentStatus}>
+                    {hasConnectAccount ? 'Set up' : 'Not set up'}
+                  </Text>
+                </View>
+                <Button
+                  title={hasConnectAccount ? "Manage" : "Set Up"}
+                  onPress={() => navigation.navigate('ConnectAccount')}
+                  size="small"
+                  style={styles.paymentButton}
+                />
+              </View>
+              
+              <Text style={styles.paymentDescription}>
+                {hasConnectAccount ? 
+                  'Your payment account is set up to receive payments for jobs.' : 
+                  'Set up a payment account to receive payments for jobs.'}
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
       
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
@@ -439,6 +528,42 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     marginBottom: 10,
+  },
+  // Payment-related styles
+  paymentCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 15,
+    ...SHADOWS.small,
+  },
+  paymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  paymentInfo: {
+    flex: 1,
+  },
+  paymentLabel: {
+    ...FONTS.bodyBold,
+    fontSize: 16,
+    color: COLORS.textDark,
+    marginBottom: 5,
+  },
+  paymentStatus: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+  },
+  paymentButton: {
+    marginLeft: 10,
+  },
+  paymentDescription: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    marginTop: 5,
   },
 });
 

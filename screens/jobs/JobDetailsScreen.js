@@ -12,7 +12,8 @@ import {
   ToastAndroid,
   Platform,
   Animated,
-  Image
+  Image,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -26,6 +27,8 @@ import {
   getDocs,
   addDoc
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { useStripe } from '@stripe/stripe-react-native';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
@@ -54,6 +57,15 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [isReviewingHelper, setIsReviewingHelper] = useState(false);
   const [showFeedbackButton, setShowFeedbackButton] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // Payment-related state
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [tipAmount, setTipAmount] = useState('');
+  const [showTipModal, setShowTipModal] = useState(false);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  const flatListRef = useRef(null);
+  const user = auth.currentUser;
 
   useEffect(() => {
     loadJobDetails();
@@ -221,6 +233,35 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  const verifyPaymentSetup = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (!userDoc.exists()) return false;
+      
+      const userData = userDoc.data();
+      return !!userData.hasPaymentMethod;
+    } catch (error) {
+      console.error('Error verifying payment setup:', error);
+      return false;
+    }
+  };
+
+  const verifyHelperPaymentSetup = async (helperId) => {
+    try {
+      const functions = getFunctions();
+      const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
+      const result = await checkConnectStatus({ userId: helperId });
+      
+      return result.data.hasAccount && 
+             result.data.accountStatus === 'complete' && 
+             result.data.chargesEnabled && 
+             !result.data.needsOnboarding;
+    } catch (error) {
+      console.error('Error verifying helper payment setup:', error);
+      return false;
+    }
+  };
+
   const showToast = (message) => {
     if (Platform.OS === 'android') {
       ToastAndroid.show(message, ToastAndroid.SHORT);
@@ -299,98 +340,236 @@ const JobDetailsScreen = ({ route, navigation }) => {
 
   const handleStartJob = async () => {
     try {
-      await updateDoc(doc(db, 'jobs', jobId), {
-        status: 'in-progress',
-        startedAt: new Date(),
-      });
-  
-      Alert.alert(
-        'Job started!',
-        'You have successfully started this job.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate back to dashboard after confirming
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              });
+      // Only check payment setup for fixed payment jobs
+      if (job.paymentType === 'fixed') {
+        setProcessingPayment(true);
+        
+        // Check if user has payment method set up
+        const hasPaymentSetup = await verifyPaymentSetup(job.createdBy);
+        if (!hasPaymentSetup) {
+          Alert.alert(
+            'Payment Setup Required',
+            'You need to set up a payment method before starting this job.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Set Up Payment', 
+                onPress: () => navigation.navigate('PaymentMethod') 
+              }
+            ]
+          );
+          setProcessingPayment(false);
+          return;
+        }
+        
+        // Check if helper has Connect account set up
+        const helperHasPaymentSetup = await verifyHelperPaymentSetup(job.helperAssigned);
+        if (!helperHasPaymentSetup) {
+          Alert.alert(
+            'Helper Payment Setup Incomplete',
+            'The helper hasn\'t completed their payment setup. Please contact them to complete setup before starting the job.',
+            [{ text: 'OK' }]
+          );
+          setProcessingPayment(false);
+          return;
+        }
+        
+        // Create payment intent for the job amount
+        const functions = getFunctions();
+        const createPaymentIntent = httpsCallable(functions, 'createPaymentIntent');
+        const result = await createPaymentIntent({
+          amount: job.paymentAmount,
+          jobId: job.id,
+          capture_method: 'manual' // Important: this holds the payment
+        });
+        
+        // Update the job status
+        await updateDoc(doc(db, 'jobs', jobId), {
+          status: 'in-progress',
+          startedAt: new Date(),
+          paymentIntentId: result.data.paymentIntentId
+        });
+        
+        Alert.alert(
+          'Job Started!',
+          'You have successfully started this job. The payment has been authorized and will be charged when the job is completed.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate back to dashboard after confirming
+                loadJobDetails();
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        // For non-fixed payment jobs, just update the status
+        await updateDoc(doc(db, 'jobs', jobId), {
+          status: 'in-progress',
+          startedAt: new Date(),
+        });
+        
+        Alert.alert(
+          'Job Started!',
+          'You have successfully started this job.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                loadJobDetails();
+              }
+            }
+          ]
+        );
+      }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error starting job:', error);
+      Alert.alert('Error', error.message || 'Failed to start job. Please try again.');
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
   const handleCompleteJob = async () => {
     try {
-      await updateDoc(doc(db, 'jobs', jobId), {
-        status: 'completed',
-        completedAt: new Date(),
-      });
+      if (job.paymentType === 'fixed' && job.paymentIntentId) {
+        // For fixed payment jobs with a payment intent, prompt confirmation
+        Alert.alert(
+          'Complete Job and Process Payment',
+          `Are you sure you want to mark this job as complete and pay ${job.paymentAmount.toFixed(2)} ${job.paymentAmount === 1 ? 'pound' : 'pounds'} to the helper?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Complete and Pay',
+              onPress: async () => {
+                setProcessingPayment(true);
+                try {
+                  // Capture the payment
+                  const functions = getFunctions();
+                  const capturePayment = httpsCallable(functions, 'capturePayment');
+                  await capturePayment({
+                    paymentIntentId: job.paymentIntentId,
+                    jobId: job.id
+                  });
+                  
+                  // Update job status
+                  await updateDoc(doc(db, 'jobs', jobId), {
+                    status: 'completed',
+                    completedAt: new Date(),
+                    paymentStatus: 'captured'
+                  });
+                  
+                  // Determine who should be reviewed
+                  const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+                  setIsReviewingHelper(shouldReviewHelper);
+                  setReviewModalVisible(true);
+                  
+                  // Refresh job details
+                  loadJobDetails();
+                } catch (error) {
+                  console.error('Error capturing payment:', error);
+                  Alert.alert('Payment Error', error.message || 'Failed to process payment. Please try again.');
+                } finally {
+                  setProcessingPayment(false);
+                }
+              }
+            }
+          ]
+        );
+      } else if (job.paymentType === 'tip') {
+        // For tip-only jobs, show tip modal first
+        setShowTipModal(true);
+      } else {
+        // For free jobs, just mark as complete
+        await updateDoc(doc(db, 'jobs', jobId), {
+          status: 'completed',
+          completedAt: new Date(),
+        });
 
-      // Determine who should be reviewed
-      // If I'm the job creator, I should review the helper
-      // If I'm the helper, I should review the job creator
-      const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
-      setIsReviewingHelper(shouldReviewHelper);
-      setReviewModalVisible(true);
-      
-      // We'll update the job status, but won't show success alert until after review
-      loadJobDetails();
+        // Determine who should be reviewed
+        const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+        setIsReviewingHelper(shouldReviewHelper);
+        setReviewModalVisible(true);
+        
+        // Refresh job details
+        loadJobDetails();
+      }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error completing job:', error);
+      Alert.alert('Error', error.message || 'Failed to complete job. Please try again.');
     }
   };
 
-  const handleSubmitReview = async (rating, comment) => {
+  const handleSubmitTip = async () => {
+    if (!tipAmount || isNaN(parseFloat(tipAmount)) || parseFloat(tipAmount) <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid tip amount.');
+      return;
+    }
+
+    const tipAmountNum = parseFloat(tipAmount);
+
+    setProcessingPayment(true);
+    setShowTipModal(false);
+
     try {
-      const reviewData = {
-        rating,
-        comment,
-        jobId: job.id,
-        jobTitle: job.title,
-        reviewerUid: auth.currentUser.uid,
-        reviewerName: currentUser?.fullName || 'Unknown User',
-        reviewedUid: isReviewingHelper ? job.helperAssigned : job.createdBy,
-        createdAt: new Date(),
-      };
-      
-      // Add review to the reviews collection
-      await addDoc(collection(db, 'reviews'), reviewData);
-      
-      // Also update the job with the rating
-      if (isReviewingHelper) {
-        await updateDoc(doc(db, 'jobs', jobId), {
-          helperRating: rating,
-          helperReview: comment
-        });
-      } else {
-        await updateDoc(doc(db, 'jobs', jobId), {
-          creatorRating: rating,
-          creatorReview: comment
-        });
+      // Check if user has payment method set up
+      const hasPaymentSetup = await verifyPaymentSetup(job.createdBy);
+      if (!hasPaymentSetup) {
+        Alert.alert(
+          'Payment Setup Required',
+          'You need to set up a payment method before sending a tip.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Set Up Payment', 
+              onPress: () => navigation.navigate('PaymentMethod') 
+            }
+          ]
+        );
+        return;
       }
       
-      // Hide the feedback button after submission
-      setShowFeedbackButton(false);
+      // Create tip payment
+      const functions = getFunctions();
+      const createTipPayment = httpsCallable(functions, 'createTipPayment');
+      await createTipPayment({
+        amount: tipAmountNum,
+        helperId: job.helperAssigned,
+        jobId: job.id
+      });
+      
+      // Update job status
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'completed',
+        completedAt: new Date(),
+        tipAmount: tipAmountNum,
+        tipPaidAt: new Date()
+      });
       
       Alert.alert(
-        'Thank You!',
-        'Your review has been submitted successfully.',
+        'Tip Sent',
+        `You've successfully completed the job and sent a ${tipAmountNum.toFixed(2)} ${tipAmountNum === 1 ? 'pound' : 'pounds'} tip!`,
         [
           {
             text: 'OK',
-            onPress: () => setReviewModalVisible(false)
+            onPress: () => {
+              // Show review modal after tip
+              const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+              setIsReviewingHelper(shouldReviewHelper);
+              setReviewModalVisible(true);
+              
+              // Refresh job details
+              loadJobDetails();
+            }
           }
         ]
       );
     } catch (error) {
-      console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Failed to submit review. Please try again.');
+      console.error('Error processing tip:', error);
+      Alert.alert('Payment Error', error.message || 'Failed to process tip. Please try again.');
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -474,6 +653,119 @@ const JobDetailsScreen = ({ route, navigation }) => {
 
   const handleViewNeighborProfile = () => {
     navigation.navigate('NeighborProfile', { neighborId: job.createdBy });
+  };
+
+  const handleShowDeleteOptions = () => {
+    Alert.alert(
+      'Chat Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete Chat',
+          style: 'destructive',
+          onPress: confirmDeleteChat
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteChat = () => {
+    Alert.alert(
+      'Delete Chat',
+      'Are you sure you want to delete this conversation? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: handleDeleteChat
+        }
+      ]
+    );
+  };
+
+  const handleDeleteChat = async () => {
+    try {
+      if (!currentChatId) {
+        throw new Error('No chat to delete');
+      }
+
+      // First, delete all messages in the chat
+      const messagesQuery = query(collection(db, 'chats', currentChatId, 'messages'));
+      const messagesSnapshot = await getDocs(messagesQuery);
+      
+      const messageDeletions = messagesSnapshot.docs.map(messageDoc => 
+        deleteDoc(doc(db, 'chats', currentChatId, 'messages', messageDoc.id))
+      );
+      
+      // Wait for all message deletions to complete
+      await Promise.all(messageDeletions);
+      
+      // Then delete the chat document itself
+      await deleteDoc(doc(db, 'chats', currentChatId));
+      
+      // Navigate back to the chat list
+      navigation.navigate('ChatsList', { refresh: true });
+
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      Alert.alert('Error', 'Failed to delete chat. Please try again.');
+    }
+  };
+
+  const handleSubmitReview = async (rating, comment) => {
+    try {
+      const reviewData = {
+        rating,
+        comment,
+        jobId: job.id,
+        jobTitle: job.title,
+        reviewerUid: auth.currentUser.uid,
+        reviewerName: currentUser?.fullName || 'Unknown User',
+        reviewedUid: isReviewingHelper ? job.helperAssigned : job.createdBy,
+        createdAt: new Date(),
+      };
+      
+      // Add review to the reviews collection
+      await addDoc(collection(db, 'reviews'), reviewData);
+      
+      // Also update the job with the rating
+      if (isReviewingHelper) {
+        await updateDoc(doc(db, 'jobs', jobId), {
+          helperRating: rating,
+          helperReview: comment
+        });
+      } else {
+        await updateDoc(doc(db, 'jobs', jobId), {
+          creatorRating: rating,
+          creatorReview: comment
+        });
+      }
+      
+      // Hide the feedback button after submission
+      setShowFeedbackButton(false);
+      
+      Alert.alert(
+        'Thank You!',
+        'Your review has been submitted successfully.',
+        [
+          {
+            text: 'OK',
+            onPress: () => setReviewModalVisible(false)
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      Alert.alert('Error', 'Failed to submit review. Please try again.');
+    }
   };
   
   if (loading) {
@@ -625,7 +917,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
             <View style={styles.helperInfo}>
               {helperProfile?.profileImage ? (
                 <Image
-                  source={{ uri: helperProfile.profileImage }}
+                source={{ uri: helperProfile.profileImage }}
                   style={styles.helperImage}
                 />
               ) : (
@@ -873,6 +1165,71 @@ const JobDetailsScreen = ({ route, navigation }) => {
           )}
         </View>
       </View>
+      
+      {/* Tip Modal */}
+      <Modal
+        visible={showTipModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTipModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add a Tip</Text>
+              <TouchableOpacity onPress={() => setShowTipModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.tipDescription}>
+              Show your appreciation for a job well done!
+            </Text>
+            
+            <Input
+              label="Tip Amount (£)"
+              value={tipAmount}
+              onChangeText={setTipAmount}
+              placeholder="Enter amount (e.g. 5.00)"
+              keyboardType="numeric"
+              required
+            />
+            
+            <Text style={styles.tipHint}>
+              You can also complete the job without a tip.
+            </Text>
+            
+            <View style={styles.tipButtonsContainer}>
+              <Button
+                title="Skip Tip"
+                type="secondary"
+                onPress={async () => {
+                  setShowTipModal(false);
+                  // Mark job as complete without tip
+                  await updateDoc(doc(db, 'jobs', jobId), {
+                    status: 'completed',
+                    completedAt: new Date(),
+                  });
+                  // Show review modal
+                  const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+                  setIsReviewingHelper(shouldReviewHelper);
+                  setReviewModalVisible(true);
+                  // Refresh job details
+                  loadJobDetails();
+                }}
+                style={styles.skipTipButton}
+              />
+              
+              <Button
+                title="Send Tip"
+                onPress={handleSubmitTip}
+                disabled={!tipAmount || isNaN(parseFloat(tipAmount)) || parseFloat(tipAmount) <= 0}
+                style={styles.sendTipButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       {/* Review Modal */}
       <ReviewModal
@@ -1365,6 +1722,62 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     color: COLORS.white,
     fontSize: 16,
+  },
+  // Modal styles for tip
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 20,
+    ...SHADOWS.medium,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    ...FONTS.heading,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  tipDescription: {
+    ...FONTS.body,
+    fontSize: 16,
+    color: COLORS.textDark,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  tipHint: {
+    ...FONTS.body,
+    fontSize: 14,
+    color: COLORS.textMedium,
+    marginTop: 10,
+    marginBottom: 20,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  tipButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  skipTipButton: {
+    flex: 1,
+    marginRight: 10,
+  },
+  sendTipButton: {
+    flex: 1,
   },
 });
 

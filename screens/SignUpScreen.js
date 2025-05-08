@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../firebase';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Input from '../components/Input';
@@ -121,6 +122,18 @@ const SignUpScreen = ({ navigation }) => {
 
       // Store user data in Firestore
       await setDoc(doc(db, 'users', user.uid), userData);
+
+      // Create Stripe customer for the user
+      const functions = getFunctions();
+      const createStripeCustomer = httpsCallable(functions, 'createStripeCustomer');
+      
+      try {
+        const result = await createStripeCustomer();
+        console.log('Stripe customer created:', result.data);
+      } catch (stripeError) {
+        console.error('Error creating Stripe customer:', stripeError);
+        // Continue anyway, we can try to create the Stripe customer later
+      }
 
       // If user wants to be a helper, they'll need to complete more info
       if (wantToBeHelper) {
