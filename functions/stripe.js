@@ -1,14 +1,10 @@
 // firebase/functions/stripe.js
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')('sk_test_placeholder');
 
-// Initialize Firebase admin if not already done
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
 
-const db = admin.firestore();
+
 
 // Create a payment intent (for holding funds when job starts)
 exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
@@ -18,6 +14,7 @@ exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
   }
 
   const { amount, jobId, capture_method } = data;
+    const db = admin.firestore();
 
   try {
     // Get the user's Stripe customer ID from Firestore
