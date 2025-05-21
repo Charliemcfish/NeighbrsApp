@@ -1,11 +1,11 @@
-// navigation.js - Updated with payment screens
+// navigation.js - Updated with Firebase Debug Screen
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 
-// Import your screens
+// Import your existing screens
 import LandingScreen from './screens/LandingScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -19,9 +19,12 @@ import NeighborProfileScreen from './screens/NeighborProfileScreen';
 import ReviewsListScreen from './screens/ReviewsListScreen';
 import FeedbackScreen from './screens/FeedbackScreen';
 
-// Import new payment screens
+// Import payment screens
 import PaymentMethodScreen from './screens/PaymentMethodScreen';
 import ConnectAccountScreen from './screens/ConnectAccountScreen';
+
+// Import the new debug screen
+import FirebaseDebugScreen from './screens/FirebaseDebugScreen';
 
 const Stack = createStackNavigator();
 
@@ -77,9 +80,12 @@ const Navigation = () => {
         <Stack.Screen name="ReviewsList" component={ReviewsListScreen} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} />
         
-        {/* Add new payment screens */}
+        {/* Payment screens */}
         <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
         <Stack.Screen name="ConnectAccount" component={ConnectAccountScreen} />
+        
+        {/* Debug screen - Add this line */}
+        <Stack.Screen name="FirebaseDebug" component={FirebaseDebugScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

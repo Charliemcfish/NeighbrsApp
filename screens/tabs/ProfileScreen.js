@@ -1,4 +1,4 @@
-// screens/tabs/ProfileScreen.js with region fix
+// screens/tabs/ProfileScreen.js - Updated with fixed authentication
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -18,22 +18,11 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
 import { logError } from '../../utils/errorLogger';
-
-// Function to get Firebase Functions with the correct region
-const getFirebaseFunctions = () => {
-  // Initialize functions with your region
-  const functions = getFunctions(undefined, 'us-central1'); // Replace with your actual region
-  
-  // If you're using the emulator locally, uncomment this line
-  // connectFunctionsEmulator(functions, "localhost", 5001);
-  
-  return functions;
-};
+import { callFirebaseFunction } from '../../utils/firebaseFunctions';
 
 const ProfileScreen = ({ route, navigation }) => {
   const { userType: initialUserType } = route.params || {};
@@ -104,19 +93,10 @@ const ProfileScreen = ({ route, navigation }) => {
       if (userType === 'helper') {
         try {
           console.log('User is a helper, checking Connect account status...');
-          const functions = getFirebaseFunctions(); // Use region-specific functions
           
-          // Ensure user is authenticated
-          if (!auth.currentUser) {
-            console.log('User not authenticated when checking Connect account');
-            throw new Error('User not authenticated');
-          }
-          
-          console.log('Calling checkConnectAccountStatus function...');
-          const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
-          const result = await checkConnectStatus();
-          console.log('Connect status result:', result.data);
-          setHasConnectAccount(result.data.hasAccount);
+          const result = await callFirebaseFunction('checkConnectAccountStatus');
+          console.log('Connect account status result:', result);
+          setHasConnectAccount(result.hasAccount);
         } catch (error) {
           logError('checkConnectAccountStatus in Profile', error);
           console.log('Error checking Connect account, setting hasConnectAccount to false');
@@ -381,6 +361,20 @@ const ProfileScreen = ({ route, navigation }) => {
       
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account Actions</Text>
+
+          <View style={styles.section}>
+    <Text style={styles.sectionTitle}>Developer Options</Text>
+    
+    <View style={styles.buttonContainer}>
+      <Button 
+        title="Firebase Debug Tools" 
+        icon="bug-outline"
+        onPress={() => navigation.navigate('FirebaseDebug')}
+        style={styles.actionButton}
+      />
+    </View>
+  </View>
+
         
         <View style={styles.buttonContainer}>
           <Button 
@@ -510,7 +504,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: COLORS.textDark,
   },
-  infoCard: {
+infoCard: {
     backgroundColor: COLORS.white,
     borderRadius: 15,
     padding: 15,
@@ -529,7 +523,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   infoTextContainer: {
-    flex: 1, // This ensures the text container takes the remaining width
+    flex: 1,
   },
   infoLabel: {
     ...FONTS.bodyBold,
@@ -543,7 +537,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
     lineHeight: 22,
-    flexWrap: 'wrap', // Ensures text wraps properly
+    flexWrap: 'wrap',
   },
   servicesContainer: {
     backgroundColor: COLORS.white,
@@ -562,7 +556,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textDark,
     marginLeft: 10,
-    flex: 1, // Ensure the text has space to wrap
+    flex: 1,
   },
   preferencesCard: {
     backgroundColor: COLORS.white,

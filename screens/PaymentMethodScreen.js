@@ -1,4 +1,4 @@
-// screens/PaymentMethodScreen.js with region fix
+// screens/PaymentMethodScreen.js - Updated with fixed authentication
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,24 +11,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CardField, useStripe, useConfirmSetupIntent } from '@stripe/stripe-react-native';
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
 import { logError } from '../utils/errorLogger';
-
-// Function to get Firebase Functions with the correct region
-const getFirebaseFunctions = () => {
-  // Initialize functions with your region
-  const functions = getFunctions(undefined, 'us-central1'); // Replace with your actual region
-  
-  // If you're using the emulator locally, uncomment this line
-  // connectFunctionsEmulator(functions, "localhost", 5001);
-  
-  return functions;
-};
+import { callFirebaseFunction } from '../utils/firebaseFunctions';
 
 const PaymentMethodScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -36,7 +25,6 @@ const PaymentMethodScreen = ({ navigation }) => {
   const [userHasPaymentMethod, setUserHasPaymentMethod] = useState(false);
   const [fetchingStatus, setFetchingStatus] = useState(true);
   const { confirmSetupIntent } = useConfirmSetupIntent();
-  const { createPaymentMethod } = useStripe();
 
   useEffect(() => {
     checkPaymentStatus();
@@ -47,7 +35,8 @@ const PaymentMethodScreen = ({ navigation }) => {
       setFetchingStatus(true);
       const user = auth.currentUser;
       if (!user) {
-        throw new Error('User not authenticated');
+        console.error('User not authenticated');
+        return;
       }
 
       console.log('Checking payment status for user:', user.uid);
@@ -85,19 +74,13 @@ const PaymentMethodScreen = ({ navigation }) => {
       console.log('Adding payment method for user:', user.uid);
 
       // First, create a Stripe customer if not already created
-      const functions = getFirebaseFunctions(); // Use the function to get region-specific functions
-      
       console.log('Creating Stripe customer...');
-      const createStripeCustomer = httpsCallable(functions, 'createStripeCustomer');
-      
-      console.log('Calling createStripeCustomer function...');
-      const customerResult = await createStripeCustomer();
-      console.log('Customer result:', customerResult.data);
+      const customerResult = await callFirebaseFunction('createStripeCustomer');
+      console.log('Customer result:', customerResult);
       
       // Create a setup intent on the backend
       console.log('Creating setup intent...');
-      const createSetupIntent = httpsCallable(functions, 'createSetupIntent');
-      const { data: { clientSecret } } = await createSetupIntent();
+      const { clientSecret } = await callFirebaseFunction('createSetupIntent');
 
       if (!clientSecret) {
         throw new Error('Failed to create setup intent');
@@ -152,21 +135,16 @@ const PaymentMethodScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // Same process as adding a new payment method
       const user = auth.currentUser;
       if (!user) {
         throw new Error('User not authenticated');
       }
       
       console.log('Updating payment method for user:', user.uid);
-
-      // Get Firebase Functions with the correct region
-      const functions = getFirebaseFunctions();
       
       // Create a setup intent on the backend
       console.log('Creating setup intent for update...');
-      const createSetupIntent = httpsCallable(functions, 'createSetupIntent');
-      const { data: { clientSecret } } = await createSetupIntent();
+      const { clientSecret } = await callFirebaseFunction('createSetupIntent');
 
       if (!clientSecret) {
         throw new Error('Failed to create setup intent');

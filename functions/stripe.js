@@ -1,4 +1,4 @@
-// firebase/functions/stripe.js
+// firebase/functions/stripe.js - With enhanced error logging for all functions
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -16,11 +16,27 @@ const stripe = require('stripe')(STRIPE_SECRET_KEY);
 // Get Firestore database
 const db = admin.firestore();
 
+// Helper function for detailed error logging
+const logFunctionError = (functionName, error, context, data) => {
+  console.error(`Error in ${functionName}:`, {
+    message: error.message,
+    code: error.code,
+    stack: error.stack,
+    context: {
+      auth: context.auth ? {
+        uid: context.auth.uid,
+        token: context.auth.token ? 'present' : 'missing'
+      } : 'not authenticated',
+    },
+    data: JSON.stringify(data)
+  });
+};
+
 // Create a payment intent (for holding funds when job starts)
-exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
+exports.createPaymentIntent = async (data, context) => {
   console.log('createPaymentIntent called with data:', JSON.stringify(data));
   
-  // Ensure the user is authenticated
+  // Ensure the user is authenticated - should be handled by wrapper now
   if (!context.auth) {
     console.error('Unauthenticated call to createPaymentIntent');
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to create a payment intent');
@@ -75,13 +91,13 @@ exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
       paymentIntentId: paymentIntent.id
     };
   } catch (error) {
-    console.error('Error creating payment intent:', error);
+    logFunctionError('createPaymentIntent', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Capture a payment (when job is completed)
-exports.capturePayment = functions.https.onCall(async (data, context) => {
+exports.capturePayment = async (data, context) => {
   console.log('capturePayment called with data:', JSON.stringify(data));
   
   // Ensure the user is authenticated
@@ -124,13 +140,13 @@ exports.capturePayment = functions.https.onCall(async (data, context) => {
 
     return { success: true, paymentStatus: paymentIntent.status };
   } catch (error) {
-    console.error('Error capturing payment:', error);
+    logFunctionError('capturePayment', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Create a tip payment (for tip-only jobs)
-exports.createTipPayment = functions.https.onCall(async (data, context) => {
+exports.createTipPayment = async (data, context) => {
   console.log('createTipPayment called with data:', JSON.stringify(data));
   
   // Ensure the user is authenticated
@@ -206,13 +222,13 @@ exports.createTipPayment = functions.https.onCall(async (data, context) => {
 
     return { success: true };
   } catch (error) {
-    console.error('Error creating tip payment:', error);
+    logFunctionError('createTipPayment', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Create a Stripe customer for a user
-exports.createStripeCustomer = functions.https.onCall(async (data, context) => {
+exports.createStripeCustomer = async (data, context) => {
   console.log('createStripeCustomer called for user:', context.auth?.uid);
   
   // Ensure the user is authenticated
@@ -222,6 +238,12 @@ exports.createStripeCustomer = functions.https.onCall(async (data, context) => {
   }
 
   try {
+    // Print more details about the auth context for debugging
+    console.log('Auth context:', {
+      uid: context.auth.uid,
+      token: context.auth.token ? 'present' : 'missing',
+    });
+    
     // Get user data
     const userDoc = await db.collection('users').doc(context.auth.uid).get();
     
@@ -260,13 +282,13 @@ exports.createStripeCustomer = functions.https.onCall(async (data, context) => {
 
     return { customerId: customer.id };
   } catch (error) {
-    console.error('Error creating Stripe customer:', error);
+    logFunctionError('createStripeCustomer', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Create a Setup Intent for adding a payment method
-exports.createSetupIntent = functions.https.onCall(async (data, context) => {
+exports.createSetupIntent = async (data, context) => {
   console.log('createSetupIntent called for user:', context.auth?.uid);
   
   // Ensure the user is authenticated
@@ -303,13 +325,13 @@ exports.createSetupIntent = functions.https.onCall(async (data, context) => {
 
     return { clientSecret: setupIntent.client_secret };
   } catch (error) {
-    console.error('Error creating setup intent:', error);
+    logFunctionError('createSetupIntent', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Create a Stripe Connect account for a helper
-exports.createConnectAccount = functions.https.onCall(async (data, context) => {
+exports.createConnectAccount = async (data, context) => {
   console.log('createConnectAccount called for user:', context.auth?.uid);
   
   // Ensure the user is authenticated
@@ -374,13 +396,13 @@ exports.createConnectAccount = functions.https.onCall(async (data, context) => {
       accountLinkUrl: accountLink.url
     };
   } catch (error) {
-    console.error('Error creating Connect account:', error);
+    logFunctionError('createConnectAccount', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Check the status of a Connect account
-exports.checkConnectAccountStatus = functions.https.onCall(async (data, context) => {
+exports.checkConnectAccountStatus = async (data, context) => {
   console.log('checkConnectAccountStatus called for user:', context.auth?.uid);
   
   // Ensure the user is authenticated
@@ -390,6 +412,12 @@ exports.checkConnectAccountStatus = functions.https.onCall(async (data, context)
   }
 
   try {
+    // Print more details about the auth context for debugging
+    console.log('Auth context in checkConnectAccountStatus:', {
+      uid: context.auth.uid,
+      token: context.auth.token ? 'present' : 'missing',
+    });
+    
     // Get user data
     const userDoc = await db.collection('users').doc(context.auth.uid).get();
     
@@ -439,13 +467,13 @@ exports.checkConnectAccountStatus = functions.https.onCall(async (data, context)
       payoutsEnabled: account.payouts_enabled
     };
   } catch (error) {
-    console.error('Error checking Connect account status:', error);
+    logFunctionError('checkConnectAccountStatus', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
 
 // Create a new account link for Connect account onboarding
-exports.createAccountLink = functions.https.onCall(async (data, context) => {
+exports.createAccountLink = async (data, context) => {
   console.log('createAccountLink called for user:', context.auth?.uid);
   
   // Ensure the user is authenticated
@@ -484,7 +512,29 @@ exports.createAccountLink = functions.https.onCall(async (data, context) => {
 
     return { accountLinkUrl: accountLink.url };
   } catch (error) {
-    console.error('Error creating account link:', error);
+    logFunctionError('createAccountLink', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-});
+};
+
+// Simple test function for authentication
+exports.testAuth = async (data, context) => {
+  console.log('Test auth function called');
+  
+  if (!context.auth) {
+    console.error('Unauthenticated call to testAuth');
+    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to call this function');
+  }
+  
+  console.log('Auth context in test function:', {
+    uid: context.auth.uid,
+    token: context.auth.token ? 'present' : 'missing'
+  });
+  
+  return {
+    success: true,
+    message: 'Authentication successful',
+    uid: context.auth.uid,
+    email: context.auth.token?.email || 'unknown'
+  };
+};
