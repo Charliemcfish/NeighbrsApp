@@ -1,4 +1,4 @@
-// screens/PaymentMethodScreen.js
+// screens/PaymentMethodScreen.js with region fix
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,12 +11,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CardField, useStripe, useConfirmSetupIntent } from '@stripe/stripe-react-native';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
+import { logError } from '../utils/errorLogger';
+
+// Function to get Firebase Functions with the correct region
+const getFirebaseFunctions = () => {
+  // Initialize functions with your region
+  const functions = getFunctions(undefined, 'us-central1'); // Replace with your actual region
+  
+  // If you're using the emulator locally, uncomment this line
+  // connectFunctionsEmulator(functions, "localhost", 5001);
+  
+  return functions;
+};
 
 const PaymentMethodScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -38,6 +50,8 @@ const PaymentMethodScreen = ({ navigation }) => {
         throw new Error('User not authenticated');
       }
 
+      console.log('Checking payment status for user:', user.uid);
+      
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
         throw new Error('User profile not found');
@@ -45,8 +59,9 @@ const PaymentMethodScreen = ({ navigation }) => {
 
       const userData = userDoc.data();
       setUserHasPaymentMethod(!!userData.hasPaymentMethod);
+      console.log('User has payment method:', !!userData.hasPaymentMethod);
     } catch (error) {
-      console.error('Error checking payment status:', error);
+      logError('checkPaymentStatus', error);
       Alert.alert('Error', 'Failed to check payment status. Please try again.');
     } finally {
       setFetchingStatus(false);
@@ -66,21 +81,32 @@ const PaymentMethodScreen = ({ navigation }) => {
       if (!user) {
         throw new Error('User not authenticated');
       }
+      
+      console.log('Adding payment method for user:', user.uid);
 
       // First, create a Stripe customer if not already created
-      const functions = getFunctions();
+      const functions = getFirebaseFunctions(); // Use the function to get region-specific functions
+      
+      console.log('Creating Stripe customer...');
       const createStripeCustomer = httpsCallable(functions, 'createStripeCustomer');
-      await createStripeCustomer();
-
+      
+      console.log('Calling createStripeCustomer function...');
+      const customerResult = await createStripeCustomer();
+      console.log('Customer result:', customerResult.data);
+      
       // Create a setup intent on the backend
+      console.log('Creating setup intent...');
       const createSetupIntent = httpsCallable(functions, 'createSetupIntent');
       const { data: { clientSecret } } = await createSetupIntent();
 
       if (!clientSecret) {
         throw new Error('Failed to create setup intent');
       }
+      
+      console.log('Setup intent created successfully');
 
       // Confirm the setup intent with the card details
+      console.log('Confirming setup intent...');
       const { setupIntent, error } = await confirmSetupIntent(clientSecret, {
         paymentMethodType: 'Card',
       });
@@ -91,12 +117,16 @@ const PaymentMethodScreen = ({ navigation }) => {
       }
 
       if (setupIntent) {
+        console.log('Setup intent confirmed successfully:', setupIntent);
+        
         // Update user's profile to indicate they have a payment method
         await updateDoc(doc(db, 'users', user.uid), {
           hasPaymentMethod: true,
           paymentMethodId: setupIntent.paymentMethodId,
           paymentMethodUpdatedAt: new Date()
         });
+        
+        console.log('User profile updated successfully');
 
         setUserHasPaymentMethod(true);
         Alert.alert(
@@ -106,7 +136,7 @@ const PaymentMethodScreen = ({ navigation }) => {
         );
       }
     } catch (error) {
-      console.error('Error adding payment method:', error);
+      logError('handleAddPaymentMethod', error);
       Alert.alert('Error', error.message || 'Failed to add payment method. Please try again.');
     } finally {
       setLoading(false);
@@ -123,9 +153,58 @@ const PaymentMethodScreen = ({ navigation }) => {
 
     try {
       // Same process as adding a new payment method
-      await handleAddPaymentMethod();
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      console.log('Updating payment method for user:', user.uid);
+
+      // Get Firebase Functions with the correct region
+      const functions = getFirebaseFunctions();
+      
+      // Create a setup intent on the backend
+      console.log('Creating setup intent for update...');
+      const createSetupIntent = httpsCallable(functions, 'createSetupIntent');
+      const { data: { clientSecret } } = await createSetupIntent();
+
+      if (!clientSecret) {
+        throw new Error('Failed to create setup intent');
+      }
+      
+      console.log('Setup intent created successfully');
+
+      // Confirm the setup intent with the card details
+      console.log('Confirming setup intent...');
+      const { setupIntent, error } = await confirmSetupIntent(clientSecret, {
+        paymentMethodType: 'Card',
+      });
+
+      if (error) {
+        console.error('Setup intent confirmation error:', error);
+        throw new Error(error.message);
+      }
+
+      if (setupIntent) {
+        console.log('Setup intent confirmed successfully:', setupIntent);
+        
+        // Update user's profile with new payment method
+        await updateDoc(doc(db, 'users', user.uid), {
+          hasPaymentMethod: true,
+          paymentMethodId: setupIntent.paymentMethodId,
+          paymentMethodUpdatedAt: new Date()
+        });
+        
+        console.log('User profile updated successfully');
+
+        Alert.alert(
+          'Success',
+          'Your payment method has been updated successfully',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      }
     } catch (error) {
-      console.error('Error updating payment method:', error);
+      logError('handleUpdatePaymentMethod', error);
       Alert.alert('Error', error.message || 'Failed to update payment method. Please try again.');
     } finally {
       setLoading(false);

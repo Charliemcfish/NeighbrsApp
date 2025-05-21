@@ -1,10 +1,34 @@
+// functions/index.js
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+require('dotenv').config();
 
-// Initialize Firebase first
-admin.initializeApp();
+// Initialize Firebase admin with explicit credentials if available
+try {
+  // If running locally with service account, use it
+  const serviceAccount = require('./service_account_key.json');
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('Initialized Firebase Admin with service account');
+} catch (e) {
+  // Fall back to default credentials (for deployed functions)
+  admin.initializeApp();
+  console.log('Initialized Firebase Admin with default credentials');
+}
 
-// Import stripe service AFTER Firebase is initialized
+// Log environment variables (excluding sensitive ones)
+console.log('Environment variables loaded:', {
+  hasStripeKey: !!process.env.STRIPE_SECRET_KEY,
+  hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
+  hasAppUrl: !!process.env.APP_URL,
+  NODE_ENV: process.env.NODE_ENV
+});
+
+// Initialize Stripe
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+// Import stripe service
 const stripeService = require('./stripe');
 
 // Export all your Stripe functions
@@ -16,17 +40,6 @@ exports.createSetupIntent = stripeService.createSetupIntent;
 exports.createConnectAccount = stripeService.createConnectAccount;
 exports.checkConnectAccountStatus = stripeService.checkConnectAccountStatus;
 exports.createAccountLink = stripeService.createAccountLink;
-
-
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
-
 
 // Add a webhook handler for Stripe events
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
@@ -44,6 +57,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   try {
     // Construct the event from the payload and signature
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+    console.log(`Webhook received: ${event.type}`);
   } catch (err) {
     console.error(`Webhook signature verification failed: ${err.message}`);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -61,6 +75,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             paymentStatus: 'succeeded',
             paymentProcessedAt: admin.firestore.FieldValue.serverTimestamp()
           });
+          console.log(`Updated job ${paymentIntent.metadata.jobId} payment status to succeeded`);
         } catch (error) {
           console.error(`Error updating job: ${error.message}`);
         }
@@ -83,6 +98,9 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
               account.details_submitted && account.charges_enabled && account.payouts_enabled,
             stripeConnectUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
+          console.log(`Updated user ${doc.id} Connect account status`);
+        } else {
+          console.log(`No user found with Connect account ID ${account.id}`);
         }
       } catch (error) {
         console.error(`Error updating user account status: ${error.message}`);

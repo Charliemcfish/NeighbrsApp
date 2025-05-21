@@ -1,4 +1,4 @@
-// screens/ConnectAccountScreen.js
+// screens/ConnectAccountScreen.js with region fix
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,6 +16,18 @@ import { auth } from '../firebase';
 import { Ionicons } from '@expo/vector-icons';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
+import { logError } from '../utils/errorLogger';
+
+// Function to get Firebase Functions with the correct region
+const getFirebaseFunctions = () => {
+  // Initialize functions with your region
+  const functions = getFunctions(undefined, 'us-central1'); // Replace with your actual region
+  
+  // If you're using the emulator locally, uncomment this line
+  // connectFunctionsEmulator(functions, "localhost", 5001);
+  
+  return functions;
+};
 
 const ConnectAccountScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -29,13 +41,26 @@ const ConnectAccountScreen = ({ navigation }) => {
   const checkConnectAccountStatus = async () => {
     try {
       setCheckingStatus(true);
-      const functions = getFunctions();
+      console.log('Checking Connect account status...');
+      
+      const functions = getFirebaseFunctions(); // Use region-specific functions
+      console.log('Got functions reference');
+      
+      console.log('Current user:', auth.currentUser?.uid);
+      if (!auth.currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      console.log('Calling checkConnectAccountStatus function...');
       const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
+      console.log('Function reference obtained, making call...');
+      
       const result = await checkConnectStatus();
+      console.log('Connect account status result:', result.data);
       
       setAccountStatus(result.data);
     } catch (error) {
-      console.error('Error checking Connect account status:', error);
+      logError('checkConnectAccountStatus', error);
       Alert.alert('Error', 'Failed to check your payment account status. Please try again.');
     } finally {
       setCheckingStatus(false);
@@ -45,13 +70,19 @@ const ConnectAccountScreen = ({ navigation }) => {
   const handleSetupConnectAccount = async () => {
     try {
       setLoading(true);
-      const functions = getFunctions();
+      console.log('Setting up Connect account...');
+      
+      const functions = getFirebaseFunctions(); // Use region-specific functions
+      console.log('Calling createConnectAccount function...');
+      
       const createConnectAccount = httpsCallable(functions, 'createConnectAccount');
       const result = await createConnectAccount();
+      console.log('Connect account creation result:', result.data);
       
       const { accountLinkUrl } = result.data;
       
       if (accountLinkUrl) {
+        console.log('Opening account link URL:', accountLinkUrl);
         // Open the account link URL in the device's browser
         await Linking.openURL(accountLinkUrl);
         
@@ -61,9 +92,12 @@ const ConnectAccountScreen = ({ navigation }) => {
           'You\'ll be redirected to set up your Stripe account. Please complete all steps to receive payments.',
           [{ text: 'OK' }]
         );
+      } else {
+        console.log('No account link URL received');
+        Alert.alert('Error', 'Failed to generate Stripe setup link. Please try again.');
       }
     } catch (error) {
-      console.error('Error setting up Connect account:', error);
+      logError('handleSetupConnectAccount', error);
       Alert.alert('Error', 'Failed to set up your payment account. Please try again.');
     } finally {
       setLoading(false);
@@ -73,13 +107,19 @@ const ConnectAccountScreen = ({ navigation }) => {
   const handleCompleteSetup = async () => {
     try {
       setLoading(true);
-      const functions = getFunctions();
+      console.log('Completing Connect account setup...');
+      
+      const functions = getFirebaseFunctions(); // Use region-specific functions
+      console.log('Calling createAccountLink function...');
+      
       const createAccountLink = httpsCallable(functions, 'createAccountLink');
       const result = await createAccountLink();
+      console.log('Account link creation result:', result.data);
       
       const { accountLinkUrl } = result.data;
       
       if (accountLinkUrl) {
+        console.log('Opening account link URL:', accountLinkUrl);
         await Linking.openURL(accountLinkUrl);
         
         Alert.alert(
@@ -87,9 +127,12 @@ const ConnectAccountScreen = ({ navigation }) => {
           'Please complete all remaining steps to activate your payment account.',
           [{ text: 'OK' }]
         );
+      } else {
+        console.log('No account link URL received');
+        Alert.alert('Error', 'Failed to generate Stripe setup link. Please try again.');
       }
     } catch (error) {
-      console.error('Error creating account link:', error);
+      logError('handleCompleteSetup', error);
       Alert.alert('Error', 'Failed to create setup link. Please try again.');
     } finally {
       setLoading(false);

@@ -1,9 +1,11 @@
+// Updated firebase.js with region configuration for Firebase Functions
+
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
 import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 
 // Your Firebase configuration
 const firebaseConfig = {
@@ -21,8 +23,10 @@ const firebaseConfig = {
 let app;
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
+  console.log('Firebase initialized successfully');
 } else {
   app = getApp();
+  console.log('Firebase app already initialized');
 }
 
 // Initialize Auth with platform-specific persistence
@@ -41,4 +45,12 @@ if (Platform.OS === 'web') {
 // Initialize Firestore
 const db = getFirestore(app);
 
-export { auth, db };
+// Initialize Firebase Functions with region
+const functions = getFunctions(app, 'us-central1'); // Replace with your actual region
+
+// Helper function to get functions with region
+export const getFirebaseFunctions = () => {
+  return functions;
+};
+
+export { auth, db, functions };

@@ -1,4 +1,4 @@
-// screens/tabs/ProfileScreen.js
+// screens/tabs/ProfileScreen.js with region fix
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -8,7 +8,8 @@ import {
   ScrollView, 
   Switch,
   Alert,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,18 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../../firebase';
 import { COLORS, FONTS, SHADOWS } from '../../styles/theme';
 import Button from '../../components/Button';
+import { logError } from '../../utils/errorLogger';
+
+// Function to get Firebase Functions with the correct region
+const getFirebaseFunctions = () => {
+  // Initialize functions with your region
+  const functions = getFunctions(undefined, 'us-central1'); // Replace with your actual region
+  
+  // If you're using the emulator locally, uncomment this line
+  // connectFunctionsEmulator(functions, "localhost", 5001);
+  
+  return functions;
+};
 
 const ProfileScreen = ({ route, navigation }) => {
   const { userType: initialUserType } = route.params || {};
@@ -33,26 +46,37 @@ const ProfileScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     loadUserProfile();
-    checkPaymentStatus();
   }, []);
+
+  useEffect(() => {
+    if (userProfile) {
+      checkPaymentStatus();
+    }
+  }, [userProfile]);
 
   const loadUserProfile = async () => {
     try {
       const user = auth.currentUser;
       
       if (!user) {
+        console.log('No authenticated user found');
         throw new Error('User not authenticated');
       }
 
+      console.log('Loading profile for user:', user.uid);
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        console.log('User data loaded successfully');
         setUserProfile(userData);
         setUserType(userData.isHelper ? 'helper' : 'neighbor');
+      } else {
+        console.log('User document does not exist');
       }
     } catch (error) {
-      console.error('Error loading user profile:', error);
+      logError('loadUserProfile', error);
+      Alert.alert('Error', 'Failed to load your profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -62,29 +86,45 @@ const ProfileScreen = ({ route, navigation }) => {
     try {
       setCheckingPaymentStatus(true);
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        console.log('No authenticated user found during payment check');
+        return;
+      }
       
       // Check if user has payment method set up
+      console.log('Checking payment method status...');
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         setHasPaymentMethod(!!userData.hasPaymentMethod);
+        console.log('Has payment method:', !!userData.hasPaymentMethod);
       }
       
       // Check if helper has Connect account
       if (userType === 'helper') {
         try {
-          const functions = getFunctions();
+          console.log('User is a helper, checking Connect account status...');
+          const functions = getFirebaseFunctions(); // Use region-specific functions
+          
+          // Ensure user is authenticated
+          if (!auth.currentUser) {
+            console.log('User not authenticated when checking Connect account');
+            throw new Error('User not authenticated');
+          }
+          
+          console.log('Calling checkConnectAccountStatus function...');
           const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
           const result = await checkConnectStatus();
+          console.log('Connect status result:', result.data);
           setHasConnectAccount(result.data.hasAccount);
         } catch (error) {
-          console.error('Error checking Connect account:', error);
+          logError('checkConnectAccountStatus in Profile', error);
+          console.log('Error checking Connect account, setting hasConnectAccount to false');
           setHasConnectAccount(false);
         }
       }
     } catch (error) {
-      console.error('Error checking payment status:', error);
+      logError('checkPaymentStatus', error);
     } finally {
       setCheckingPaymentStatus(false);
     }
@@ -116,6 +156,7 @@ const ProfileScreen = ({ route, navigation }) => {
         Alert.alert('Success', 'Helper mode has been turned off');
       }
     } catch (error) {
+      logError('handleToggleHelperMode', error);
       Alert.alert('Error', error.message);
     }
   };
@@ -129,6 +170,7 @@ const ProfileScreen = ({ route, navigation }) => {
         routes: [{ name: 'Landing' }]
       });
     } catch (error) {
+      logError('handleSignOut', error);
       Alert.alert('Error', error.message);
     }
   };
@@ -158,6 +200,7 @@ const ProfileScreen = ({ route, navigation }) => {
                 'Password reset email has been sent. Please check your inbox.'
               );
             } catch (error) {
+              logError('handleChangePassword', error);
               Alert.alert('Error', error.message);
             }
           }
@@ -169,6 +212,7 @@ const ProfileScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
@@ -254,53 +298,60 @@ const ProfileScreen = ({ route, navigation }) => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payment Settings</Text>
         
-        <View style={styles.paymentCard}>
-          <View style={styles.paymentRow}>
-            <View style={styles.paymentInfo}>
-              <Text style={styles.paymentLabel}>Payment Method</Text>
-              <Text style={styles.paymentStatus}>
-                {hasPaymentMethod ? 'Set up' : 'Not set up'}
-              </Text>
-            </View>
-            <Button
-              title={hasPaymentMethod ? "Update" : "Set Up"}
-              onPress={() => navigation.navigate('PaymentMethod')}
-              size="small"
-              style={styles.paymentButton}
-            />
+        {checkingPaymentStatus ? (
+          <View style={styles.loadingPaymentStatus}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.loadingPaymentText}>Checking payment status...</Text>
           </View>
-          
-          <Text style={styles.paymentDescription}>
-            {hasPaymentMethod ? 
-              'Your payment method is set up and ready to use for jobs.' : 
-              'Set up a payment method to pay for jobs.'}
-          </Text>
-          
-          {userType === 'helper' && (
-            <>
-              <View style={[styles.paymentRow, {marginTop: 20}]}>
-                <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentLabel}>Payment Account</Text>
-                  <Text style={styles.paymentStatus}>
-                    {hasConnectAccount ? 'Set up' : 'Not set up'}
-                  </Text>
-                </View>
-                <Button
-                  title={hasConnectAccount ? "Manage" : "Set Up"}
-                  onPress={() => navigation.navigate('ConnectAccount')}
-                  size="small"
-                  style={styles.paymentButton}
-                />
+        ) : (
+          <View style={styles.paymentCard}>
+            <View style={styles.paymentRow}>
+              <View style={styles.paymentInfo}>
+                <Text style={styles.paymentLabel}>Payment Method</Text>
+                <Text style={styles.paymentStatus}>
+                  {hasPaymentMethod ? 'Set up' : 'Not set up'}
+                </Text>
               </View>
-              
-              <Text style={styles.paymentDescription}>
-                {hasConnectAccount ? 
-                  'Your payment account is set up to receive payments for jobs.' : 
-                  'Set up a payment account to receive payments for jobs.'}
-              </Text>
-            </>
-          )}
-        </View>
+              <Button
+                title={hasPaymentMethod ? "Update" : "Set Up"}
+                onPress={() => navigation.navigate('PaymentMethod')}
+                size="small"
+                style={styles.paymentButton}
+              />
+            </View>
+            
+            <Text style={styles.paymentDescription}>
+              {hasPaymentMethod ? 
+                'Your payment method is set up and ready to use for jobs.' : 
+                'Set up a payment method to pay for jobs.'}
+            </Text>
+            
+            {userType === 'helper' && (
+              <>
+                <View style={[styles.paymentRow, {marginTop: 20}]}>
+                  <View style={styles.paymentInfo}>
+                    <Text style={styles.paymentLabel}>Payment Account</Text>
+                    <Text style={styles.paymentStatus}>
+                      {hasConnectAccount ? 'Set up' : 'Not set up'}
+                    </Text>
+                  </View>
+                  <Button
+                    title={hasConnectAccount ? "Manage" : "Set Up"}
+                    onPress={() => navigation.navigate('ConnectAccount')}
+                    size="small"
+                    style={styles.paymentButton}
+                  />
+                </View>
+                
+                <Text style={styles.paymentDescription}>
+                  {hasConnectAccount ? 
+                    'Your payment account is set up to receive payments for jobs.' : 
+                    'Set up a payment account to receive payments for jobs.'}
+                </Text>
+              </>
+            )}
+          </View>
+        )}
       </View>
       
       <View style={styles.section}>
@@ -373,6 +424,20 @@ const styles = StyleSheet.create({
   loadingText: {
     ...FONTS.body,
     fontSize: 16,
+    color: COLORS.textDark,
+  },
+  loadingPaymentStatus: {
+    padding: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    ...SHADOWS.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  loadingPaymentText: {
+    ...FONTS.body,
+    marginLeft: 10,
     color: COLORS.textDark,
   },
   errorContainer: {
