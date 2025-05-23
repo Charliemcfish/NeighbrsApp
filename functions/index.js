@@ -1,4 +1,4 @@
-// functions/index.js - Updated with more explicit auth handling
+// functions/index.js - Complete updated version
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 require('dotenv').config();
@@ -6,15 +6,19 @@ require('dotenv').config();
 // Initialize Firebase admin with explicit auth options
 try {
   // If running locally with service account, use it
-  const serviceAccount = require('./service_account_key.json');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log('Initialized Firebase Admin with service account');
+  try {
+    const serviceAccount = require('./service_account_key.json');
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('Initialized Firebase Admin with service account');
+  } catch (e) {
+    // Fall back to default credentials (for deployed functions)
+    admin.initializeApp();
+    console.log('Initialized Firebase Admin with default credentials');
+  }
 } catch (e) {
-  // Fall back to default credentials (for deployed functions)
-  admin.initializeApp();
-  console.log('Initialized Firebase Admin with default credentials');
+  console.error('Error initializing Firebase Admin:', e);
 }
 
 // Log environment variables (excluding sensitive ones)
@@ -31,9 +35,8 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 // Import stripe service
 const stripeService = require('./stripe');
 
-// Add an auth verification middleware
-const verifyAuth = async (context) => {
-  // Check if authentication context exists
+// Simplified auth check function that matches how Firebase client works
+const checkAuth = (context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
       'unauthenticated', 
@@ -41,41 +44,66 @@ const verifyAuth = async (context) => {
     );
   }
   
+  console.log(`User authenticated: ${context.auth.uid}`);
+  return context.auth.uid;
+};
+
+// Simple test function
+exports.testAuth = functions.https.onCall((data, context) => {
   try {
-    // Verify the token (will throw if invalid)
-    await admin.auth().getUser(context.auth.uid);
-    console.log(`User authenticated: ${context.auth.uid}`);
-    return context.auth.uid;
+    const uid = checkAuth(context);
+    return {
+      success: true,
+      message: 'Authentication successful',
+      uid: uid,
+      timestamp: new Date().toISOString()
+    };
   } catch (error) {
-    console.error(`Auth verification failed for user ${context.auth.uid}:`, error);
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'User authentication verification failed'
-    );
+    console.error('Test auth function failed:', error);
+    throw error;
   }
-};
+});
 
-// Wrap stripe functions with auth verification
-const wrapWithAuth = (fn) => {
-  return async (data, context) => {
-    // First verify auth
-    const uid = await verifyAuth(context);
-    
-    // Then execute the actual function
-    console.log(`Executing function for user ${uid}`);
-    return await fn(data, {...context, uid});
-  };
-};
+// Export all your Stripe functions with simplified auth checking
+exports.createPaymentIntent = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createPaymentIntent(data, {...context, uid});
+});
 
-// Export all your Stripe functions with auth wrapper
-exports.createPaymentIntent = functions.https.onCall(wrapWithAuth(stripeService.createPaymentIntent));
-exports.capturePayment = functions.https.onCall(wrapWithAuth(stripeService.capturePayment));
-exports.createTipPayment = functions.https.onCall(wrapWithAuth(stripeService.createTipPayment));
-exports.createStripeCustomer = functions.https.onCall(wrapWithAuth(stripeService.createStripeCustomer));
-exports.createSetupIntent = functions.https.onCall(wrapWithAuth(stripeService.createSetupIntent));
-exports.createConnectAccount = functions.https.onCall(wrapWithAuth(stripeService.createConnectAccount));
-exports.checkConnectAccountStatus = functions.https.onCall(wrapWithAuth(stripeService.checkConnectAccountStatus));
-exports.createAccountLink = functions.https.onCall(wrapWithAuth(stripeService.createAccountLink));
+exports.capturePayment = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.capturePayment(data, {...context, uid});
+});
+
+exports.createTipPayment = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createTipPayment(data, {...context, uid});
+});
+
+exports.createStripeCustomer = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createStripeCustomer(data, {...context, uid});
+});
+
+exports.createSetupIntent = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createSetupIntent(data, {...context, uid});
+});
+
+exports.createConnectAccount = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createConnectAccount(data, {...context, uid});
+});
+
+exports.checkConnectAccountStatus = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.checkConnectAccountStatus(data, {...context, uid});
+});
+
+exports.createAccountLink = functions.https.onCall((data, context) => {
+  const uid = checkAuth(context);
+  return stripeService.createAccountLink(data, {...context, uid});
+});
 
 // Add a webhook handler for Stripe events
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
@@ -151,23 +179,4 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
 
   // Return a success response to Stripe
   res.json({ received: true });
-});
-
-// Add a simple test function to check auth
-exports.testAuth = functions.https.onCall(async (data, context) => {
-  try {
-    // Verify auth
-    const uid = await verifyAuth(context);
-    
-    // If auth verification passes, return success
-    return {
-      success: true,
-      message: 'Authentication successful',
-      uid: uid,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Test auth function failed:', error);
-    throw error;
-  }
 });

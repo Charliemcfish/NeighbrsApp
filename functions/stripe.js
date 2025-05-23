@@ -1,4 +1,4 @@
-// firebase/functions/stripe.js - With enhanced error logging for all functions
+// functions/stripe.js - Complete updated version
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -36,28 +36,29 @@ const logFunctionError = (functionName, error, context, data) => {
 exports.createPaymentIntent = async (data, context) => {
   console.log('createPaymentIntent called with data:', JSON.stringify(data));
   
-  // Ensure the user is authenticated - should be handled by wrapper now
-  if (!context.auth) {
-    console.error('Unauthenticated call to createPaymentIntent');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to create a payment intent');
+  // Ensure the user is authenticated - should be handled by index.js now
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createPaymentIntent');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   const { amount, jobId, capture_method } = data;
   
   try {
-    console.log(`Getting user ${context.auth.uid} for createPaymentIntent`);
+    console.log(`Getting user ${uid} for createPaymentIntent`);
     // Get the user's Stripe customer ID from Firestore
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
     const userData = userDoc.data();
     
     if (!userData.stripeCustomerId) {
-      console.error('User has no stripeCustomerId:', context.auth.uid);
+      console.error('User has no stripeCustomerId:', uid);
       throw new functions.https.HttpsError('failed-precondition', 'You need to set up your payment method first');
     }
     
@@ -71,7 +72,7 @@ exports.createPaymentIntent = async (data, context) => {
       capture_method: capture_method || 'manual', // Default to manual for holding payments
       metadata: {
         jobId,
-        userId: context.auth.uid
+        userId: uid
       }
     });
     
@@ -101,9 +102,10 @@ exports.capturePayment = async (data, context) => {
   console.log('capturePayment called with data:', JSON.stringify(data));
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to capturePayment');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to capture a payment');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to capturePayment');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   const { paymentIntentId, jobId } = data;
@@ -119,7 +121,7 @@ exports.capturePayment = async (data, context) => {
     
     const jobData = jobDoc.data();
     
-    if (jobData.createdBy !== context.auth.uid) {
+    if (jobData.createdBy !== uid) {
       console.error('Permission denied: user is not job creator');
       throw new functions.https.HttpsError('permission-denied', 'Only the job creator can release the payment');
     }
@@ -150,26 +152,27 @@ exports.createTipPayment = async (data, context) => {
   console.log('createTipPayment called with data:', JSON.stringify(data));
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to createTipPayment');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to send a tip');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createTipPayment');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   const { amount, helperId, jobId } = data;
 
   try {
     // Get the user's Stripe customer ID
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
     const userData = userDoc.data();
     
     if (!userData.stripeCustomerId) {
-      console.error('User has no stripeCustomerId:', context.auth.uid);
+      console.error('User has no stripeCustomerId:', uid);
       throw new functions.https.HttpsError('failed-precondition', 'You need to set up your payment method first');
     }
 
@@ -200,7 +203,7 @@ exports.createTipPayment = async (data, context) => {
       },
       metadata: {
         jobId,
-        userId: context.auth.uid,
+        userId: uid,
         helperId
       }
     });
@@ -229,26 +232,27 @@ exports.createTipPayment = async (data, context) => {
 
 // Create a Stripe customer for a user
 exports.createStripeCustomer = async (data, context) => {
-  console.log('createStripeCustomer called for user:', context.auth?.uid);
+  console.log('createStripeCustomer called for user:', context.uid);
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to createStripeCustomer');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to set up a payment method');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createStripeCustomer');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   try {
     // Print more details about the auth context for debugging
     console.log('Auth context:', {
-      uid: context.auth.uid,
-      token: context.auth.token ? 'present' : 'missing',
+      uid: uid,
+      token: context.auth && context.auth.token ? 'present' : 'missing',
     });
     
     // Get user data
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -266,14 +270,14 @@ exports.createStripeCustomer = async (data, context) => {
       email: userData.email,
       name: userData.fullName,
       metadata: {
-        firebaseUserId: context.auth.uid
+        firebaseUserId: uid
       }
     });
     
     console.log('Stripe customer created:', customer.id);
 
     // Update the user document with the Stripe customer ID
-    await db.collection('users').doc(context.auth.uid).update({
+    await db.collection('users').doc(uid).update({
       stripeCustomerId: customer.id,
       stripeSetupAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -289,20 +293,21 @@ exports.createStripeCustomer = async (data, context) => {
 
 // Create a Setup Intent for adding a payment method
 exports.createSetupIntent = async (data, context) => {
-  console.log('createSetupIntent called for user:', context.auth?.uid);
+  console.log('createSetupIntent called for user:', context.uid);
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to createSetupIntent');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to set up a payment method');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createSetupIntent');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   try {
     // Get user data
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -310,7 +315,7 @@ exports.createSetupIntent = async (data, context) => {
 
     // Ensure the user has a Stripe customer ID
     if (!userData.stripeCustomerId) {
-      console.error('User has no stripeCustomerId:', context.auth.uid);
+      console.error('User has no stripeCustomerId:', uid);
       throw new functions.https.HttpsError('failed-precondition', 'User needs to be a Stripe customer first');
     }
 
@@ -332,20 +337,21 @@ exports.createSetupIntent = async (data, context) => {
 
 // Create a Stripe Connect account for a helper
 exports.createConnectAccount = async (data, context) => {
-  console.log('createConnectAccount called for user:', context.auth?.uid);
+  console.log('createConnectAccount called for user:', context.uid);
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to createConnectAccount');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to create a Connect account');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createConnectAccount');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   try {
     // Get user data
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -366,7 +372,7 @@ exports.createConnectAccount = async (data, context) => {
       type: 'standard',
       email: userData.email,
       metadata: {
-        firebaseUserId: context.auth.uid
+        firebaseUserId: uid
       }
     });
     
@@ -383,7 +389,7 @@ exports.createConnectAccount = async (data, context) => {
     console.log('Account link created');
 
     // Update the user document with the Connect account ID
-    await db.collection('users').doc(context.auth.uid).update({
+    await db.collection('users').doc(uid).update({
       stripeConnectAccountId: account.id,
       stripeConnectSetupAt: admin.firestore.FieldValue.serverTimestamp(),
       stripeConnectOnboardingComplete: false
@@ -403,26 +409,27 @@ exports.createConnectAccount = async (data, context) => {
 
 // Check the status of a Connect account
 exports.checkConnectAccountStatus = async (data, context) => {
-  console.log('checkConnectAccountStatus called for user:', context.auth?.uid);
+  console.log('checkConnectAccountStatus called for user:', context.uid);
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to checkConnectAccountStatus');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to check your Connect account');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to checkConnectAccountStatus');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   try {
     // Print more details about the auth context for debugging
     console.log('Auth context in checkConnectAccountStatus:', {
-      uid: context.auth.uid,
-      token: context.auth.token ? 'present' : 'missing',
+      uid: uid,
+      token: context.auth && context.auth.token ? 'present' : 'missing',
     });
     
     // Get user data
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -454,7 +461,7 @@ exports.checkConnectAccountStatus = async (data, context) => {
     // Update the onboarding status if it's complete
     if (onboardingComplete && !userData.stripeConnectOnboardingComplete) {
       console.log('Updating user document with onboarding complete status');
-      await db.collection('users').doc(context.auth.uid).update({
+      await db.collection('users').doc(uid).update({
         stripeConnectOnboardingComplete: true
       });
     }
@@ -474,20 +481,21 @@ exports.checkConnectAccountStatus = async (data, context) => {
 
 // Create a new account link for Connect account onboarding
 exports.createAccountLink = async (data, context) => {
-  console.log('createAccountLink called for user:', context.auth?.uid);
+  console.log('createAccountLink called for user:', context.uid);
   
   // Ensure the user is authenticated
-  if (!context.auth) {
-    console.error('Unauthenticated call to createAccountLink');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to create an account link');
+  const uid = context.uid;
+  if (!uid) {
+    console.error('No uid provided to createAccountLink');
+    throw new functions.https.HttpsError('internal', 'UID not provided to function');
   }
 
   try {
     // Get user data
-    const userDoc = await db.collection('users').doc(context.auth.uid).get();
+    const userDoc = await db.collection('users').doc(uid).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', context.auth.uid);
+      console.error('User document not found:', uid);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -495,7 +503,7 @@ exports.createAccountLink = async (data, context) => {
 
     // Check if the user has a Connect account ID
     if (!userData.stripeConnectAccountId) {
-      console.error('User has no Connect account ID:', context.auth.uid);
+      console.error('User has no Connect account ID:', uid);
       throw new functions.https.HttpsError('failed-precondition', 'User does not have a Connect account');
     }
 
@@ -515,26 +523,4 @@ exports.createAccountLink = async (data, context) => {
     logFunctionError('createAccountLink', error, context, data);
     throw new functions.https.HttpsError('internal', error.message);
   }
-};
-
-// Simple test function for authentication
-exports.testAuth = async (data, context) => {
-  console.log('Test auth function called');
-  
-  if (!context.auth) {
-    console.error('Unauthenticated call to testAuth');
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to call this function');
-  }
-  
-  console.log('Auth context in test function:', {
-    uid: context.auth.uid,
-    token: context.auth.token ? 'present' : 'missing'
-  });
-  
-  return {
-    success: true,
-    message: 'Authentication successful',
-    uid: context.auth.uid,
-    email: context.auth.token?.email || 'unknown'
-  };
 };
