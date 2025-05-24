@@ -204,24 +204,107 @@ exports.stripeWebhook = onRequest({
     case 'account.updated':
       const account = event.data.object;
       console.log(`Connect account ${account.id} was updated`);
+      console.log(`Account type: ${account.type}`);
+      console.log(`Details submitted: ${account.details_submitted}`);
+      console.log(`Charges enabled: ${account.charges_enabled}`);
+      console.log(`Payouts enabled: ${account.payouts_enabled}`);
+      
       try {
         const usersRef = admin.firestore().collection('users');
         const snapshot = await usersRef.where('stripeConnectAccountId', '==', account.id).get();
         
         if (!snapshot.empty) {
           const doc = snapshot.docs[0];
-          await doc.ref.update({
-            stripeConnectOnboardingComplete: 
-              account.details_submitted && account.charges_enabled && account.payouts_enabled,
-            stripeConnectUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
+          const userData = doc.data();
+          
+          // For Express accounts, we need to check different criteria
+          let onboardingComplete = false;
+          
+          if (account.type === 'express') {
+            // For Express accounts, focus on charges_enabled and payouts_enabled
+            onboardingComplete = account.charges_enabled && account.payouts_enabled;
+            console.log(`Express account onboarding complete: ${onboardingComplete}`);
+          } else {
+            // For Standard accounts (if any remain), use the original logic
+            onboardingComplete = account.details_submitted && account.charges_enabled && account.payouts_enabled;
+            console.log(`Standard account onboarding complete: ${onboardingComplete}`);
+          }
+          
+          const updateData = {
+            stripeConnectOnboardingComplete: onboardingComplete,
+            stripeConnectUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            stripeConnectAccountType: account.type, // Track account type
+            stripeConnectChargesEnabled: account.charges_enabled,
+            stripeConnectPayoutsEnabled: account.payouts_enabled,
+            stripeConnectDetailsSubmitted: account.details_submitted
+          };
+          
+          // If there are requirements, store them for debugging
+          if (account.requirements) {
+            updateData.stripeConnectRequirements = {
+              currently_due: account.requirements.currently_due || [],
+              eventually_due: account.requirements.eventually_due || [],
+              past_due: account.requirements.past_due || [],
+              pending_verification: account.requirements.pending_verification || []
+            };
+          }
+          
+          await doc.ref.update(updateData);
           console.log(`Updated user ${doc.id} Connect account status`);
+          
+          // Log the requirements for debugging
+          if (account.requirements && account.requirements.currently_due && account.requirements.currently_due.length > 0) {
+            console.log(`Account ${account.id} has requirements currently due:`, account.requirements.currently_due);
+          }
+          
         } else {
           console.log(`No user found with Connect account ID ${account.id}`);
         }
       } catch (error) {
         console.error(`Error updating user account status: ${error.message}`);
       }
+      break;
+      
+    case 'account.application.deauthorized':
+      const deauthorizedAccount = event.data.object;
+      console.log(`Connect account ${deauthorizedAccount.id} was deauthorized`);
+      
+      try {
+        const usersRef = admin.firestore().collection('users');
+        const snapshot = await usersRef.where('stripeConnectAccountId', '==', deauthorizedAccount.id).get();
+        
+        if (!snapshot.empty) {
+          const doc = snapshot.docs[0];
+          await doc.ref.update({
+            stripeConnectOnboardingComplete: false,
+            stripeConnectDeauthorized: true,
+            stripeConnectDeauthorizedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`Marked user ${doc.id} Connect account as deauthorized`);
+        }
+      } catch (error) {
+        console.error(`Error handling account deauthorization: ${error.message}`);
+      }
+      break;
+      
+    case 'capability.updated':
+      const capability = event.data.object;
+      console.log(`Capability ${capability.id} updated for account ${capability.account}`);
+      console.log(`Capability status: ${capability.status}`);
+      
+      // This can help track when specific capabilities (like card_payments or transfers) are enabled
+      if (capability.status === 'active') {
+        console.log(`Capability ${capability.id} is now active`);
+      } else if (capability.status === 'inactive') {
+        console.log(`Capability ${capability.id} is inactive`);
+      }
+      break;
+    
+    case 'person.created':
+    case 'person.updated':
+      const person = event.data.object;
+      console.log(`Person ${person.id} ${event.type.split('.')[1]} for account ${person.account}`);
+      // This can help track individual verification status for Express accounts
       break;
       
     default:

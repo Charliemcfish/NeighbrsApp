@@ -1,0 +1,203 @@
+<!-- Create these files in your Firebase hosting public folder -->
+
+<!-- public/stripe-connect-complete.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Setup Complete - Neighbrs</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #008CFF, #AEE0FF);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        .success-icon {
+            font-size: 64px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .btn {
+            background: #008CFF;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px;
+        }
+        .btn:hover {
+            background: #0066CC;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: #008CFF;
+            border: 2px solid #008CFF;
+        }
+        .btn-secondary:hover {
+            background: #008CFF;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✅</div>
+        <h1>Payment Setup Complete!</h1>
+        <p>Great! Your payment account is now set up and ready to receive payments from completed jobs.</p>
+        
+        <a href="#" onclick="openApp()" class="btn">Return to Neighbrs App</a>
+        <a href="#" onclick="window.close()" class="btn btn-secondary">Close Window</a>
+        
+        <p style="font-size: 14px; margin-top: 20px; color: #999;">
+            If the app doesn't open automatically, please open the Neighbrs app manually.
+        </p>
+    </div>
+
+    <script>
+        function openApp() {
+            // Try to open the app using deep link
+            window.location.href = 'neighbrs://connect-complete';
+            
+            // Fallback: try to close the window after a delay
+            setTimeout(() => {
+                try {
+                    window.close();
+                } catch (e) {
+                    console.log('Cannot close window automatically');
+                }
+            }, 1000);
+        }
+        
+        // Auto-attempt to return to app after 3 seconds
+        setTimeout(() => {
+            openApp();
+        }, 3000);
+    </script>
+</body>
+</html>
+
+<!-- public/stripe-connect-refresh.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continue Setup - Neighbrs</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #008CFF, #AEE0FF);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        .refresh-icon {
+            font-size: 48px;
+            color: #FFC107;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .btn {
+            background: #008CFF;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px;
+        }
+        .btn:hover {
+            background: #0066CC;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="refresh-icon">🔄</div>
+        <h1>Continue Your Setup</h1>
+        <p>Let's continue setting up your payment account. This will only take a few more minutes.</p>
+        
+        <a href="#" onclick="returnToApp()" class="btn">Return to Neighbrs App</a>
+        
+        <p style="font-size: 14px; margin-top: 20px; color: #999;">
+            Open the Neighbrs app and try the setup process again.
+        </p>
+    </div>
+
+    <script>
+        function returnToApp() {
+            // Try to open the app using deep link
+            window.location.href = 'neighbrs://connect-refresh';
+            
+            // Fallback: try to close the window after a delay
+            setTimeout(() => {
+                try {
+                    window.close();
+                } catch (e) {
+                    console.log('Cannot close window automatically');
+                }
+            }, 1000);
+        }
+        
+        // Auto-attempt to return to app after 2 seconds
+        setTimeout(() => {
+            returnToApp();
+        }, 2000);
+    </script>
+</body>
+</html>

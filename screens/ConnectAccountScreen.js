@@ -1,4 +1,4 @@
-// screens/ConnectAccountScreen.js - Updated with fixed authentication
+// screens/ConnectAccountScreen.js - Updated for Express onboarding
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -54,7 +54,7 @@ const ConnectAccountScreen = ({ navigation }) => {
   const handleSetupConnectAccount = async () => {
     try {
       setLoading(true);
-      console.log('Setting up Connect account...');
+      console.log('Setting up Connect Express account...');
       
       const result = await callFirebaseFunction('createConnectAccount');
       console.log('Connect account creation result:', result);
@@ -68,13 +68,13 @@ const ConnectAccountScreen = ({ navigation }) => {
         
         // Show a message to the user
         Alert.alert(
-          'Stripe Setup',
-          'You\'ll be redirected to set up your Stripe account. Please complete all steps to receive payments.',
+          'Quick Payment Setup',
+          'You\'ll be redirected to complete a quick setup to receive payments. This should only take a few minutes!',
           [{ text: 'OK' }]
         );
       } else {
         console.log('No account link URL received');
-        Alert.alert('Error', 'Failed to generate Stripe setup link. Please try again.');
+        Alert.alert('Error', 'Failed to generate setup link. Please try again.');
       }
     } catch (error) {
       logError('handleSetupConnectAccount', error);
@@ -100,12 +100,12 @@ const ConnectAccountScreen = ({ navigation }) => {
         
         Alert.alert(
           'Complete Setup',
-          'Please complete all remaining steps to activate your payment account.',
+          'Please complete the remaining steps to activate your payment account.',
           [{ text: 'OK' }]
         );
       } else {
         console.log('No account link URL received');
-        Alert.alert('Error', 'Failed to generate Stripe setup link. Please try again.');
+        Alert.alert('Error', 'Failed to generate setup link. Please try again.');
       }
     } catch (error) {
       logError('handleCompleteSetup', error);
@@ -144,26 +144,33 @@ const ConnectAccountScreen = ({ navigation }) => {
           {accountStatus?.hasAccount ? (
             <>
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Account Status:</Text>
+                <Text style={styles.statusLabel}>Account Type:</Text>
+                <Text style={styles.statusValue}>
+                  {accountStatus.accountType === 'express' ? 'Express (Quick Setup)' : 'Standard'}
+                </Text>
+              </View>
+              
+              <View style={styles.statusRow}>
+                <Text style={styles.statusLabel}>Status:</Text>
                 <Text 
                   style={[
                     styles.statusValue, 
                     accountStatus.accountStatus === 'complete' ? styles.statusComplete : styles.statusIncomplete
                   ]}
                 >
-                  {accountStatus.accountStatus === 'complete' ? 'Complete' : 'Incomplete'}
+                  {accountStatus.accountStatus === 'complete' ? 'Ready to receive payments' : 'Setup incomplete'}
                 </Text>
               </View>
               
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Charges Enabled:</Text>
+                <Text style={styles.statusLabel}>Can Accept Payments:</Text>
                 <Text 
                   style={[
                     styles.statusValue, 
                     accountStatus.chargesEnabled ? styles.statusComplete : styles.statusIncomplete
                   ]}
                 >
-                  {accountStatus.chargesEnabled ? 'Yes' : 'No'}
+                  {accountStatus.chargesEnabled ? 'Yes' : 'Not yet'}
                 </Text>
               </View>
               
@@ -175,7 +182,7 @@ const ConnectAccountScreen = ({ navigation }) => {
                     accountStatus.payoutsEnabled ? styles.statusComplete : styles.statusIncomplete
                   ]}
                 >
-                  {accountStatus.payoutsEnabled ? 'Yes' : 'No'}
+                  {accountStatus.payoutsEnabled ? 'Yes' : 'Not yet'}
                 </Text>
               </View>
               
@@ -183,28 +190,48 @@ const ConnectAccountScreen = ({ navigation }) => {
                 <View style={styles.incompleteMessage}>
                   <Ionicons name="alert-circle" size={24} color={COLORS.warning} style={styles.alertIcon} />
                   <Text style={styles.incompleteText}>
-                    Your payment account setup is incomplete. Please complete all required steps to receive payments.
+                    {accountStatus.accountType === 'express' 
+                      ? 'Your quick setup is almost complete! Please finish the remaining steps to start receiving payments.'
+                      : 'Your payment account setup is incomplete. Please complete all required steps to receive payments.'
+                    }
                   </Text>
                 </View>
               ) : (
                 <View style={styles.completeMessage}>
                   <Ionicons name="checkmark-circle" size={24} color={COLORS.success} style={styles.successIcon} />
                   <Text style={styles.completeText}>
-                    Your payment account is fully set up and ready to receive payments!
+                    Great! Your payment account is fully set up and ready to receive payments from completed jobs.
+                  </Text>
+                </View>
+              )}
+              
+              {accountStatus.requirementsOverdue && (
+                <View style={styles.urgentMessage}>
+                  <Ionicons name="warning" size={24} color={COLORS.error} style={styles.alertIcon} />
+                  <Text style={styles.urgentText}>
+                    Action required: Some information is overdue. Please complete your setup to continue receiving payments.
                   </Text>
                 </View>
               )}
             </>
           ) : (
-            <Text style={styles.noAccountText}>
-              You haven't set up a payment account yet. Set up your account to receive payments for completed jobs.
-            </Text>
+            <View style={styles.setupPrompt}>
+              <Ionicons name="card-outline" size={48} color={COLORS.primary} style={styles.setupIcon} />
+              <Text style={styles.noAccountText}>
+                Set up your payment account to start receiving money for completed jobs.
+              </Text>
+              <Text style={styles.setupBenefit}>
+                ✓ Quick 2-minute setup{'\n'}
+                ✓ Secure payments via Stripe{'\n'}
+                ✓ Money sent directly to your bank
+              </Text>
+            </View>
           )}
         </View>
 
         {!accountStatus?.hasAccount ? (
           <Button
-            title={loading ? "Setting up..." : "Set Up Payment Account"}
+            title={loading ? "Setting up..." : "Quick Setup (2 mins)"}
             onPress={handleSetupConnectAccount}
             loading={loading}
             disabled={loading}
@@ -213,7 +240,7 @@ const ConnectAccountScreen = ({ navigation }) => {
           />
         ) : accountStatus.needsOnboarding ? (
           <Button
-            title={loading ? "Loading..." : "Complete Account Setup"}
+            title={loading ? "Loading..." : "Complete Quick Setup"}
             onPress={handleCompleteSetup}
             loading={loading}
             disabled={loading}
@@ -231,23 +258,34 @@ const ConnectAccountScreen = ({ navigation }) => {
         )}
 
         <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>How Payments Work:</Text>
+          <Text style={styles.infoTitle}>How Express Setup Works:</Text>
           <View style={styles.infoItem}>
-            <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} style={styles.infoIcon} />
-            <Text style={styles.infoText}>You need a Stripe account to receive payments from jobs</Text>
+            <Ionicons name="flash" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoText}>Quick 2-minute setup - no lengthy business forms</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} style={styles.infoIcon} />
-            <Text style={styles.infoText}>Payments are securely processed by Stripe when jobs are completed</Text>
+            <Ionicons name="shield-checkmark" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoText}>Secure identity verification through Stripe</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} style={styles.infoIcon} />
-            <Text style={styles.infoText}>Stripe may hold funds for a few days before releasing to your bank account</Text>
+            <Ionicons name="card" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoText}>Just need your ID and bank account details</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} style={styles.infoIcon} />
-            <Text style={styles.infoText}>Stripe will send payouts directly to your bank account</Text>
+            <Ionicons name="cash" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoText}>Start receiving payments as soon as setup is complete</Text>
           </View>
+          <View style={styles.infoItem}>
+            <Ionicons name="time" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Text style={styles.infoText}>Payments typically arrive in 1-2 business days</Text>
+          </View>
+        </View>
+
+        <View style={styles.helpSection}>
+          <Text style={styles.helpTitle}>Need Help?</Text>
+          <Text style={styles.helpText}>
+            If you encounter any issues during setup, you can restart the process anytime by tapping the setup button again.
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -350,6 +388,13 @@ const styles = StyleSheet.create({
     padding: 15,
     marginTop: 10,
   },
+  urgentMessage: {
+    flexDirection: 'row',
+    backgroundColor: '#ffebee',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 10,
+  },
   alertIcon: {
     marginRight: 10,
   },
@@ -366,11 +411,31 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.warning,
   },
+  urgentText: {
+    ...FONTS.body,
+    flex: 1,
+    color: COLORS.error,
+  },
+  setupPrompt: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  setupIcon: {
+    marginBottom: 15,
+  },
   noAccountText: {
     ...FONTS.body,
-    color: COLORS.textMedium,
-    marginBottom: 10,
+    color: COLORS.textDark,
+    marginBottom: 15,
     textAlign: 'center',
+    fontSize: 16,
+  },
+  setupBenefit: {
+    ...FONTS.body,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
   },
   setupButton: {
     marginBottom: 20,
@@ -409,6 +474,23 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     flex: 1,
     color: COLORS.textDark,
+  },
+  helpSection: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 20,
+    ...SHADOWS.small,
+  },
+  helpTitle: {
+    ...FONTS.bodyBold,
+    fontSize: 16,
+    marginBottom: 10,
+    color: COLORS.textDark,
+  },
+  helpText: {
+    ...FONTS.body,
+    color: COLORS.textMedium,
+    lineHeight: 20,
   },
 });
 

@@ -1,4 +1,4 @@
-// functions/stripe.js - Complete updated version
+// functions/stripe.js - Updated with Express onboarding
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -335,7 +335,7 @@ exports.createSetupIntent = async (data, context) => {
   }
 };
 
-// Create a Stripe Connect account for a helper
+// Create a Stripe Connect Express account for a helper
 exports.createConnectAccount = async (data, context) => {
   console.log('createConnectAccount called for user:', context.uid);
   
@@ -366,36 +366,48 @@ exports.createConnectAccount = async (data, context) => {
       };
     }
 
-    // Create a new Connect account (Standard account)
-    console.log('Creating new Stripe Connect account for:', userData.email);
+    // Create a new Connect Express account
+    console.log('Creating new Stripe Connect Express account for:', userData.email);
     const account = await stripe.accounts.create({
-      type: 'standard',
+      type: 'express', // Changed from 'standard' to 'express'
       email: userData.email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: 'individual', // Set to individual for faster onboarding
+      individual: {
+        email: userData.email,
+        first_name: userData.fullName ? userData.fullName.split(' ')[0] : '',
+        last_name: userData.fullName ? userData.fullName.split(' ').slice(1).join(' ') : '',
+      },
       metadata: {
         firebaseUserId: uid
       }
     });
     
-    console.log('Connect account created:', account.id);
+    console.log('Connect Express account created:', account.id);
 
-    // Create an account link for onboarding
+    // Create an account link for Express onboarding
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
       refresh_url: process.env.STRIPE_CONNECT_REFRESH_URL || `https://neighbrs-app.firebaseapp.com/stripe-connect-refresh?account_id=${account.id}`,
       return_url: process.env.STRIPE_CONNECT_RETURN_URL || `https://neighbrs-app.firebaseapp.com/stripe-connect-complete?account_id=${account.id}`,
       type: 'account_onboarding',
+      collect: 'eventually_due', // This makes onboarding faster by only collecting essential info initially
     });
     
-    console.log('Account link created');
+    console.log('Account link created for Express onboarding');
 
     // Update the user document with the Connect account ID
     await db.collection('users').doc(uid).update({
       stripeConnectAccountId: account.id,
       stripeConnectSetupAt: admin.firestore.FieldValue.serverTimestamp(),
-      stripeConnectOnboardingComplete: false
+      stripeConnectOnboardingComplete: false,
+      stripeConnectAccountType: 'express' // Track that this is an Express account
     });
     
-    console.log('User document updated with Connect account ID');
+    console.log('User document updated with Connect Express account ID');
 
     return { 
       accountId: account.id,
@@ -441,7 +453,8 @@ exports.checkConnectAccountStatus = async (data, context) => {
       return { 
         hasAccount: false,
         accountStatus: null,
-        needsOnboarding: true
+        needsOnboarding: true,
+        accountType: null
       };
     }
 
@@ -450,6 +463,9 @@ exports.checkConnectAccountStatus = async (data, context) => {
     const account = await stripe.accounts.retrieve(userData.stripeConnectAccountId);
     console.log('Connect account retrieved, details_submitted:', account.details_submitted);
 
+    // For Express accounts, check if they can accept payments
+    const canAcceptPayments = account.charges_enabled && account.payouts_enabled;
+    
     // Check if the account has completed onboarding
     const onboardingComplete = 
       account.details_submitted &&
@@ -457,6 +473,7 @@ exports.checkConnectAccountStatus = async (data, context) => {
       account.payouts_enabled;
     
     console.log('Onboarding complete?', onboardingComplete);
+    console.log('Can accept payments?', canAcceptPayments);
 
     // Update the onboarding status if it's complete
     if (onboardingComplete && !userData.stripeConnectOnboardingComplete) {
@@ -468,10 +485,14 @@ exports.checkConnectAccountStatus = async (data, context) => {
 
     return {
       hasAccount: true,
-      accountStatus: account.details_submitted ? 'complete' : 'incomplete',
+      accountStatus: canAcceptPayments ? 'complete' : 'incomplete',
       needsOnboarding: !onboardingComplete,
       chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled
+      payoutsEnabled: account.payouts_enabled,
+      accountType: account.type, // Will be 'express' for Express accounts
+      detailsSubmitted: account.details_submitted,
+      requirementsOverdue: account.requirements?.currently_due?.length > 0,
+      requirements: account.requirements
     };
   } catch (error) {
     logFunctionError('checkConnectAccountStatus', error, context, data);
@@ -507,13 +528,14 @@ exports.createAccountLink = async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition', 'User does not have a Connect account');
     }
 
-    // Create a new account link for onboarding
+    // Create a new account link for Express onboarding
     console.log('Creating account link for Connect account:', userData.stripeConnectAccountId);
     const accountLink = await stripe.accountLinks.create({
       account: userData.stripeConnectAccountId,
       refresh_url: process.env.STRIPE_CONNECT_REFRESH_URL || `https://neighbrs-app.firebaseapp.com/stripe-connect-refresh?account_id=${userData.stripeConnectAccountId}`,
       return_url: process.env.STRIPE_CONNECT_RETURN_URL || `https://neighbrs-app.firebaseapp.com/stripe-connect-complete?account_id=${userData.stripeConnectAccountId}`,
       type: 'account_onboarding',
+      collect: 'eventually_due', // This makes the process faster
     });
     
     console.log('Account link created');
