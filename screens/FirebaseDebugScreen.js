@@ -15,8 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import Button from '../components/Button';
 import { COLORS, FONTS, SHADOWS } from '../styles/theme';
 import { debugFirebaseConfig, debugAuthState } from '../utils/firebaseDebug';
-import { getFirebaseFunctions, callFirebaseFunction, debugAuthState as debugFunctionAuthState } from '../utils/firebaseFunctions';
+import { callFirebaseFunction, debugAuthState as debugFunctionAuthState } from '../utils/firebaseFunctions';
 import { verifyAuthentication, getAuthToken } from '../utils/authUtils';
+
+
 
 const FirebaseDebugScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);

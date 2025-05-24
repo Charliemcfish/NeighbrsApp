@@ -50,7 +50,7 @@ const StripeProvider = ({ children }) => {
 
   return (
     <NativeStripeProvider
-      publishableKey="pk_test_51Ox3nTJx8ZWvgwYADp5jzL5vPqyZjmSe3nTNyLldCOvdepDkXadB4UQopYcgWpfyASlI5tXaVIEyVSJTMNVXZjXf00bw9Lhlkl"
+      publishableKey="pk_test_51RLPSVEP3auVpDo10N8I7TIyeZHv86hcbuQLvu5TLBvDsX18mbOL9K7da3VMCzETB1tAWCDJ7z2jqXIhrglaBF9x00vkKvOPzK"
       merchantIdentifier="merchant.com.neighbrs"
       urlScheme="neighbrs"
     >

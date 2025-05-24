@@ -1,11 +1,18 @@
-// functions/index.js - Complete updated version
-const functions = require('firebase-functions');
+// functions/index.js - Final fix: Allow unauthenticated Cloud Run invocation
+const {onCall, onRequest, HttpsError} = require('firebase-functions/v2/https');
+const {setGlobalOptions} = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
-// Initialize Firebase admin with explicit auth options
-try {
-  // If running locally with service account, use it
+// IMPORTANT: Set global options to allow unauthenticated invocation at Cloud Run level
+// Firebase will still handle authentication at the function level
+setGlobalOptions({
+  region: 'us-central1',
+  maxInstances: 10,
+});
+
+// Initialize Firebase admin
+if (!admin.apps.length) {
   try {
     const serviceAccount = require('./service_account_key.json');
     admin.initializeApp({
@@ -13,100 +20,152 @@ try {
     });
     console.log('Initialized Firebase Admin with service account');
   } catch (e) {
-    // Fall back to default credentials (for deployed functions)
     admin.initializeApp();
     console.log('Initialized Firebase Admin with default credentials');
   }
-} catch (e) {
-  console.error('Error initializing Firebase Admin:', e);
 }
 
-// Log environment variables (excluding sensitive ones)
-console.log('Environment variables loaded:', {
-  hasStripeKey: !!process.env.STRIPE_SECRET_KEY,
-  hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
-  hasAppUrl: !!process.env.APP_URL,
-  NODE_ENV: process.env.NODE_ENV
-});
-
-// Initialize Stripe
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-
-// Import stripe service
 const stripeService = require('./stripe');
 
-// Simplified auth check function that matches how Firebase client works
-const checkAuth = (context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated', 
-      'Request not authenticated. The function must be called while authenticated.'
-    );
+// Auth check function - Firebase level authentication
+const checkAuth = (request) => {
+  console.log('=== FIREBASE AUTH CHECK ===');
+  console.log('Request auth exists:', !!request.auth);
+  
+  if (request.auth) {
+    console.log('✅ Firebase auth context found');
+    console.log('UID:', request.auth.uid);
+    console.log('Email:', request.auth.token?.email);
+  } else {
+    console.log('❌ No Firebase auth context');
   }
   
-  console.log(`User authenticated: ${context.auth.uid}`);
-  return context.auth.uid;
+  console.log('=== END AUTH CHECK ===');
+  
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated with Firebase');
+  }
+  
+  return request.auth.uid;
 };
 
-// Simple test function
-exports.testAuth = functions.https.onCall((data, context) => {
+// Test function - allows unauthenticated Cloud Run invocation but requires Firebase auth
+exports.testAuth = onCall({
+  // No authentication required at Cloud Run level
+  // Firebase handles auth through request.auth
+}, (request) => {
   try {
-    const uid = checkAuth(context);
+    console.log('=== TEST AUTH FUNCTION ===');
+    console.log('Function called successfully');
+    
+    const uid = checkAuth(request);
+    
     return {
       success: true,
-      message: 'Authentication successful',
       uid: uid,
+      message: 'Firebase authentication successful',
       timestamp: new Date().toISOString()
     };
   } catch (error) {
-    console.error('Test auth function failed:', error);
+    console.error('testAuth failed:', error);
     throw error;
   }
 });
 
-// Export all your Stripe functions with simplified auth checking
-exports.createPaymentIntent = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createPaymentIntent(data, {...context, uid});
+// All Stripe functions with the same pattern
+exports.createStripeCustomer = onCall({}, async (request) => {
+  try {
+    console.log('createStripeCustomer called');
+    const uid = checkAuth(request);
+    return await stripeService.createStripeCustomer(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createStripeCustomer failed:', error);
+    throw error;
+  }
 });
 
-exports.capturePayment = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.capturePayment(data, {...context, uid});
+exports.checkConnectAccountStatus = onCall({}, async (request) => {
+  try {
+    console.log('checkConnectAccountStatus called');
+    const uid = checkAuth(request);
+    return await stripeService.checkConnectAccountStatus(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('checkConnectAccountStatus failed:', error);
+    throw error;
+  }
 });
 
-exports.createTipPayment = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createTipPayment(data, {...context, uid});
+exports.createConnectAccount = onCall({}, async (request) => {
+  try {
+    console.log('createConnectAccount called');
+    const uid = checkAuth(request);
+    return await stripeService.createConnectAccount(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createConnectAccount failed:', error);
+    throw error;
+  }
 });
 
-exports.createStripeCustomer = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createStripeCustomer(data, {...context, uid});
+exports.createAccountLink = onCall({}, async (request) => {
+  try {
+    console.log('createAccountLink called');
+    const uid = checkAuth(request);
+    return await stripeService.createAccountLink(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createAccountLink failed:', error);
+    throw error;
+  }
 });
 
-exports.createSetupIntent = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createSetupIntent(data, {...context, uid});
+exports.createPaymentIntent = onCall({}, async (request) => {
+  try {
+    console.log('createPaymentIntent called');
+    const uid = checkAuth(request);
+    return await stripeService.createPaymentIntent(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createPaymentIntent failed:', error);
+    throw error;
+  }
 });
 
-exports.createConnectAccount = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createConnectAccount(data, {...context, uid});
+exports.capturePayment = onCall({}, async (request) => {
+  try {
+    console.log('capturePayment called');
+    const uid = checkAuth(request);
+    return await stripeService.capturePayment(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('capturePayment failed:', error);
+    throw error;
+  }
 });
 
-exports.checkConnectAccountStatus = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.checkConnectAccountStatus(data, {...context, uid});
+exports.createTipPayment = onCall({}, async (request) => {
+  try {
+    console.log('createTipPayment called');
+    const uid = checkAuth(request);
+    return await stripeService.createTipPayment(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createTipPayment failed:', error);
+    throw error;
+  }
 });
 
-exports.createAccountLink = functions.https.onCall((data, context) => {
-  const uid = checkAuth(context);
-  return stripeService.createAccountLink(data, {...context, uid});
+exports.createSetupIntent = onCall({}, async (request) => {
+  try {
+    console.log('createSetupIntent called');
+    const uid = checkAuth(request);
+    return await stripeService.createSetupIntent(request.data, {auth: {uid}, uid});
+  } catch (error) {
+    console.error('createSetupIntent failed:', error);
+    throw error;
+  }
 });
 
-// Add a webhook handler for Stripe events
-exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+// Webhook handler
+exports.stripeWebhook = onRequest({
+  cors: true,
+}, async (req, res) => {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
   if (!webhookSecret) {
@@ -114,12 +173,10 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     return res.status(500).send('Webhook Error: Missing webhook secret');
   }
 
-  // Verify the event came from Stripe
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
-    // Construct the event from the payload and signature
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
     console.log(`Webhook received: ${event.type}`);
   } catch (err) {
@@ -127,12 +184,10 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle specific events
   switch (event.type) {
     case 'payment_intent.succeeded':
       const paymentIntent = event.data.object;
       console.log(`PaymentIntent ${paymentIntent.id} succeeded`);
-      // Update job status in Firestore based on metadata
       if (paymentIntent.metadata && paymentIntent.metadata.jobId) {
         try {
           await admin.firestore().collection('jobs').doc(paymentIntent.metadata.jobId).update({
@@ -149,9 +204,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     case 'account.updated':
       const account = event.data.object;
       console.log(`Connect account ${account.id} was updated`);
-      // Update user account status in Firestore
       try {
-        // Find the user with this Connect account ID
         const usersRef = admin.firestore().collection('users');
         const snapshot = await usersRef.where('stripeConnectAccountId', '==', account.id).get();
         
@@ -171,12 +224,9 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
       }
       break;
       
-    // Add other event handlers as needed
-      
     default:
       console.log(`Unhandled event type: ${event.type}`);
   }
 
-  // Return a success response to Stripe
   res.json({ received: true });
 });

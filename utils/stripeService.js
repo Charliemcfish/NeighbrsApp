@@ -3,7 +3,7 @@ import { initStripe } from '@stripe/stripe-react-native';
 import axios from 'axios';
 
 // Your Stripe publishable key
-const STRIPE_PUBLISHABLE_KEY = 'pk_test_51Ox3nTJx8ZWvgwYADp5jzL5vPqyZjmSe3nTNyLldCOvdepDkXadB4UQopYcgWpfyASlI5tXaVIEyVSJTMNVXZjXf00bw9Lhlkl';
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_51RLPSVEP3auVpDo10N8I7TIyeZHv86hcbuQLvu5TLBvDsX18mbOL9K7da3VMCzETB1tAWCDJ7z2jqXIhrglaBF9x00vkKvOPzK';
 
 // Your API URL (we'll need to set this up)
 const API_URL = 'https://your-backend-api.com';
