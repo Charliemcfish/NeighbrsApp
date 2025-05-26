@@ -32,11 +32,13 @@ const logFunctionError = (functionName, error, context, data) => {
   });
 };
 
-// Create a payment intent (for holding funds when job starts)
+// In functions/stripe.js - Replace the createPaymentIntent function
+// Fixed to use only transfer_data (recommended approach)
+
 exports.createPaymentIntent = async (data, context) => {
   console.log('createPaymentIntent called with data:', JSON.stringify(data));
   
-  // Ensure the user is authenticated - should be handled by index.js now
+  // Ensure the user is authenticated
   const uid = context.uid;
   if (!uid) {
     console.error('No uid provided to createPaymentIntent');
@@ -61,43 +63,138 @@ exports.createPaymentIntent = async (data, context) => {
       console.error('User has no stripeCustomerId:', uid);
       throw new functions.https.HttpsError('failed-precondition', 'You need to set up your payment method first');
     }
+
+    // Get the job details to find the helper
+    console.log(`Getting job details for job ${jobId}`);
+    const jobDoc = await db.collection('jobs').doc(jobId).get();
     
-    console.log(`Creating payment intent for amount ${amount} for customer ${userData.stripeCustomerId}`);
+    if (!jobDoc.exists) {
+      console.error('Job document not found:', jobId);
+      throw new functions.https.HttpsError('not-found', 'Job document not found');
+    }
     
-    // Create a Payment Intent with manual capture
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: 'gbp',
+    const jobData = jobDoc.data();
+    
+    if (!jobData.helperAssigned) {
+      console.error('No helper assigned to job:', jobId);
+      throw new functions.https.HttpsError('failed-precondition', 'No helper assigned to this job');
+    }
+
+    // Get the helper's Connect account
+    console.log(`Getting helper ${jobData.helperAssigned} Connect account`);
+    const helperDoc = await db.collection('users').doc(jobData.helperAssigned).get();
+    
+    if (!helperDoc.exists) {
+      console.error('Helper document not found:', jobData.helperAssigned);
+      throw new functions.https.HttpsError('not-found', 'Helper document not found');
+    }
+    
+    const helperData = helperDoc.data();
+    
+    if (!helperData.stripeConnectAccountId) {
+      console.error('Helper has no Connect account:', jobData.helperAssigned);
+      throw new functions.https.HttpsError('failed-precondition', 'Helper has not set up their payment account');
+    }
+
+    // Get the user's default payment method
+    console.log(`Getting payment methods for customer ${userData.stripeCustomerId}`);
+    const paymentMethods = await stripe.paymentMethods.list({
       customer: userData.stripeCustomerId,
-      capture_method: capture_method || 'manual', // Default to manual for holding payments
+      type: 'card',
+    });
+
+    if (paymentMethods.data.length === 0) {
+      console.error('No payment methods found for customer');
+      throw new functions.https.HttpsError('failed-precondition', 'You need to add a payment method first');
+    }
+
+    const defaultPaymentMethod = paymentMethods.data[0];
+    console.log(`Using payment method: ${defaultPaymentMethod.id}`);
+    
+    console.log(`Creating payment intent for amount ${amount} with transfer to ${helperData.stripeConnectAccountId}`);
+    
+    // Calculate amounts in cents
+    const amountInCents = Math.round(amount * 100);
+    
+    // Option 1: Transfer all funds to helper (no platform fee)
+    // Use this if you don't want to take a platform fee
+    const paymentIntentData = {
+      amount: amountInCents,
+      currency: 'usd',
+      customer: userData.stripeCustomerId,
+      payment_method: defaultPaymentMethod.id,
+      capture_method: capture_method || 'manual',
+      confirmation_method: 'manual',
+      confirm: true,
+      return_url: 'https://neighbrs-app.firebaseapp.com/return',
+      // Transfer all funds to helper
+      transfer_data: {
+        destination: helperData.stripeConnectAccountId,
+      },
       metadata: {
         jobId,
-        userId: uid
+        userId: uid,
+        helperId: jobData.helperAssigned,
+        originalAmount: amount
       }
-    });
+    };
+
+    // Option 2: If you want to take a platform fee, use this instead:
+    // Uncomment the lines below and comment out the transfer_data above
+    /*
+    const platformFeePercent = 0.05; // 5% platform fee - adjust as needed
+    const platformFeeInCents = Math.round(amountInCents * platformFeePercent);
     
-    console.log('Payment intent created:', paymentIntent.id);
+    paymentIntentData.application_fee_amount = platformFeeInCents;
+    paymentIntentData.transfer_data = {
+      destination: helperData.stripeConnectAccountId,
+    };
+    paymentIntentData.metadata.platformFee = platformFeeInCents / 100;
+    paymentIntentData.metadata.helperReceives = (amountInCents - platformFeeInCents) / 100;
+    */
+    
+    // Create the payment intent
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
+    
+    console.log('Payment intent created and confirmed:', paymentIntent.id);
+    console.log('Payment intent status:', paymentIntent.status);
+    console.log('Transfer destination:', helperData.stripeConnectAccountId);
 
     // Update the job with payment intent information
     await db.collection('jobs').doc(jobId).update({
       paymentIntentId: paymentIntent.id,
-      paymentStatus: 'authorized',
-      paymentUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      paymentStatus: paymentIntent.status === 'requires_capture' ? 'authorized' : paymentIntent.status,
+      paymentUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      helperStripeAccountId: helperData.stripeConnectAccountId,
+      transferAmount: amount, // Full amount goes to helper (no platform fee in this version)
+      platformFee: 0
     });
     
-    console.log('Job updated with payment intent');
+    console.log('Job updated with payment intent and transfer info');
 
     return {
       clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      transferDestination: helperData.stripeConnectAccountId,
+      transferAmount: amount
     };
   } catch (error) {
     logFunctionError('createPaymentIntent', error, context, data);
+    
+    // Handle specific Stripe errors
+    if (error.type === 'StripeCardError') {
+      throw new functions.https.HttpsError('failed-precondition', `Card error: ${error.message}`);
+    } else if (error.type === 'StripeInvalidRequestError') {
+      throw new functions.https.HttpsError('invalid-argument', `Invalid request: ${error.message}`);
+    }
+    
     throw new functions.https.HttpsError('internal', error.message);
   }
 };
 
-// Capture a payment (when job is completed)
+// In functions/stripe.js - Replace the capturePayment function
+
 exports.capturePayment = async (data, context) => {
   console.log('capturePayment called with data:', JSON.stringify(data));
   
@@ -126,23 +223,68 @@ exports.capturePayment = async (data, context) => {
       throw new functions.https.HttpsError('permission-denied', 'Only the job creator can release the payment');
     }
     
-    console.log(`Capturing payment intent ${paymentIntentId}`);
-
-    // Capture the payment
-    const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
-    console.log('Payment captured:', paymentIntent.id);
+    console.log(`Retrieving payment intent ${paymentIntentId}`);
+    
+    // First, retrieve the payment intent to check its status
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    console.log('Payment intent status:', paymentIntent.status);
+    
+    let finalPaymentIntent;
+    
+    if (paymentIntent.status === 'requires_capture') {
+      // Payment intent is ready to be captured
+      console.log('Capturing payment intent');
+      finalPaymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
+    } else if (paymentIntent.status === 'succeeded') {
+      // Payment has already been captured
+      console.log('Payment intent already captured');
+      finalPaymentIntent = paymentIntent;
+    } else if (paymentIntent.status === 'requires_payment_method' || 
+               paymentIntent.status === 'requires_confirmation') {
+      // Payment intent needs to be confirmed first
+      console.log('Payment intent requires confirmation, attempting to confirm');
+      try {
+        finalPaymentIntent = await stripe.paymentIntents.confirm(paymentIntentId);
+        
+        // If it's now requires_capture, capture it
+        if (finalPaymentIntent.status === 'requires_capture') {
+          console.log('Now capturing confirmed payment intent');
+          finalPaymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
+        }
+      } catch (confirmError) {
+        console.error('Error confirming payment intent:', confirmError);
+        throw new functions.https.HttpsError('failed-precondition', 
+          `Payment could not be processed: ${confirmError.message}`);
+      }
+    } else {
+      console.error('Payment intent in unexpected status:', paymentIntent.status);
+      throw new functions.https.HttpsError('failed-precondition', 
+        `Payment cannot be captured. Current status: ${paymentIntent.status}`);
+    }
+    
+    console.log('Final payment status:', finalPaymentIntent.status);
 
     // Update the job with payment capture information
     await db.collection('jobs').doc(jobId).update({
-      paymentStatus: 'captured',
+      paymentStatus: finalPaymentIntent.status,
       paymentCapturedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
     console.log('Job updated as payment captured');
 
-    return { success: true, paymentStatus: paymentIntent.status };
+    return { 
+      success: true, 
+      paymentStatus: finalPaymentIntent.status,
+      paymentIntentId: finalPaymentIntent.id
+    };
   } catch (error) {
     logFunctionError('capturePayment', error, context, data);
+    
+    // Handle specific Stripe errors
+    if (error.type === 'StripeInvalidRequestError') {
+      throw new functions.https.HttpsError('failed-precondition', error.message);
+    }
+    
     throw new functions.https.HttpsError('internal', error.message);
   }
 };
@@ -419,7 +561,8 @@ exports.createConnectAccount = async (data, context) => {
   }
 };
 
-// Check the status of a Connect account
+// In functions/stripe.js - Replace the checkConnectAccountStatus function
+
 exports.checkConnectAccountStatus = async (data, context) => {
   console.log('checkConnectAccountStatus called for user:', context.uid);
   
@@ -437,11 +580,16 @@ exports.checkConnectAccountStatus = async (data, context) => {
       token: context.auth && context.auth.token ? 'present' : 'missing',
     });
     
-    // Get user data
-    const userDoc = await db.collection('users').doc(uid).get();
+    // Allow checking another user's account status if userId is provided
+    // This is useful for job creators to verify helper payment setup
+    const targetUserId = data.userId || uid;
+    console.log('Checking Connect account status for user:', targetUserId);
+    
+    // Get user data for the target user
+    const userDoc = await db.collection('users').doc(targetUserId).get();
     
     if (!userDoc.exists) {
-      console.error('User document not found:', uid);
+      console.error('User document not found:', targetUserId);
       throw new functions.https.HttpsError('not-found', 'User document not found');
     }
     
@@ -475,8 +623,8 @@ exports.checkConnectAccountStatus = async (data, context) => {
     console.log('Onboarding complete?', onboardingComplete);
     console.log('Can accept payments?', canAcceptPayments);
 
-    // Update the onboarding status if it's complete
-    if (onboardingComplete && !userData.stripeConnectOnboardingComplete) {
+    // Update the onboarding status if it's complete and we're checking our own account
+    if (onboardingComplete && !userData.stripeConnectOnboardingComplete && targetUserId === uid) {
       console.log('Updating user document with onboarding complete status');
       await db.collection('users').doc(uid).update({
         stripeConnectOnboardingComplete: true
@@ -543,6 +691,71 @@ exports.createAccountLink = async (data, context) => {
     return { accountLinkUrl: accountLink.url };
   } catch (error) {
     logFunctionError('createAccountLink', error, context, data);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+};
+
+// Add this to functions/stripe.js - New function to verify payment transfers
+
+exports.verifyPaymentTransfer = async (data, context) => {
+  console.log('verifyPaymentTransfer called');
+  
+  const uid = context.uid;
+  if (!uid) {
+    throw new functions.https.HttpsError('internal', 'UID not provided');
+  }
+
+  const { paymentIntentId } = data;
+  
+  try {
+    // Retrieve the payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    console.log('Payment Intent Status:', paymentIntent.status);
+    console.log('Payment Intent Amount:', paymentIntent.amount / 100);
+    
+    // Check for transfers
+    const transfers = await stripe.transfers.list({
+      destination: paymentIntent.transfer_data?.destination,
+      limit: 10,
+    });
+    
+    console.log('Transfers found:', transfers.data.length);
+    
+    const relatedTransfer = transfers.data.find(transfer => 
+      transfer.source_transaction === paymentIntent.charges?.data[0]?.id
+    );
+    
+    if (relatedTransfer) {
+      console.log('Transfer found:', {
+        id: relatedTransfer.id,
+        amount: relatedTransfer.amount / 100,
+        destination: relatedTransfer.destination,
+        created: new Date(relatedTransfer.created * 1000),
+        status: relatedTransfer.status || 'completed'
+      });
+    }
+    
+    // Get destination account info
+    if (paymentIntent.transfer_data?.destination) {
+      const account = await stripe.accounts.retrieve(paymentIntent.transfer_data.destination);
+      console.log('Destination account:', {
+        id: account.id,
+        email: account.email,
+        type: account.type,
+        charges_enabled: account.charges_enabled,
+        payouts_enabled: account.payouts_enabled
+      });
+    }
+    
+    return {
+      paymentStatus: paymentIntent.status,
+      transferFound: !!relatedTransfer,
+      transferAmount: relatedTransfer ? relatedTransfer.amount / 100 : 0,
+      destinationAccount: paymentIntent.transfer_data?.destination || null
+    };
+    
+  } catch (error) {
+    console.error('Error verifying payment transfer:', error);
     throw new functions.https.HttpsError('internal', error.message);
   }
 };

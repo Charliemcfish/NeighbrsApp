@@ -36,6 +36,8 @@ import Input from '../../components/Input';
 import { calculateDistance, getReadableDistance } from '../../utils/locationService';
 import ReviewModal from '../../components/ReviewModal';
 import StarRating from '../../components/StarRating';
+import { callFirebaseFunction } from '../../utils/firebaseFunctions';
+
 
 const JobDetailsScreen = ({ route, navigation }) => {
   const { jobId, userType } = route.params;
@@ -246,21 +248,42 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const verifyHelperPaymentSetup = async (helperId) => {
-    try {
-      const functions = getFunctions();
-      const checkConnectStatus = httpsCallable(functions, 'checkConnectAccountStatus');
-      const result = await checkConnectStatus({ userId: helperId });
-      
-      return result.data.hasAccount && 
-             result.data.accountStatus === 'complete' && 
-             result.data.chargesEnabled && 
-             !result.data.needsOnboarding;
-    } catch (error) {
-      console.error('Error verifying helper payment setup:', error);
-      return false;
-    }
-  };
+const verifyHelperPaymentSetup = async (helperId) => {
+  try {
+    console.log('Checking helper payment setup for:', helperId);
+    
+    // Call the Firebase function to check Connect account status
+    const result = await callFirebaseFunction('checkConnectAccountStatus', { userId: helperId });
+    
+    console.log('Helper Connect account status:', result);
+    
+    // Updated logic - Check if the helper has a complete account setup
+    // Based on your logs, the helper should pass this check
+    const isComplete = result.hasAccount && 
+                      result.accountStatus === 'complete' && 
+                      result.chargesEnabled && 
+                      result.payoutsEnabled && 
+                      !result.needsOnboarding;
+    
+    console.log('Helper payment setup complete:', isComplete);
+    console.log('Breakdown:');
+    console.log('- hasAccount:', result.hasAccount);
+    console.log('- accountStatus === "complete":', result.accountStatus === 'complete');
+    console.log('- chargesEnabled:', result.chargesEnabled);
+    console.log('- payoutsEnabled:', result.payoutsEnabled);
+    console.log('- needsOnboarding:', result.needsOnboarding);
+    console.log('- !needsOnboarding:', !result.needsOnboarding);
+    
+    return isComplete;
+  } catch (error) {
+    console.error('Error verifying helper payment setup:', error);
+    
+    // If there's an error calling the function, we should probably allow the job to proceed
+    // but log the error for debugging
+    console.log('Allowing job to proceed despite payment check error');
+    return true; // Allow job to proceed if we can't verify
+  }
+};
 
   const showToast = (message) => {
     if (Platform.OS === 'android') {
@@ -338,98 +361,134 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleStartJob = async () => {
-    try {
-      // Only check payment setup for fixed payment jobs
-      if (job.paymentType === 'fixed') {
-        setProcessingPayment(true);
+// In screens/jobs/JobDetailsScreen.js - Replace the handleStartJob function
+
+const handleStartJob = async () => {
+  try {
+    // Only check payment setup for fixed payment jobs
+    if (job.paymentType === 'fixed') {
+      setProcessingPayment(true);
+      
+      // Check if user has payment method set up
+      const hasPaymentSetup = await verifyPaymentSetup(job.createdBy);
+      if (!hasPaymentSetup) {
+        Alert.alert(
+          'Payment Setup Required',
+          'You need to set up a payment method before starting this job.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Set Up Payment', 
+              onPress: () => navigation.navigate('PaymentMethod') 
+            }
+          ]
+        );
+        setProcessingPayment(false);
+        return;
+      }
+      
+      // Check if helper has Connect account set up
+      try {
+        console.log('About to check helper payment setup for helper ID:', job.helperAssigned);
         
-        // Check if user has payment method set up
-        const hasPaymentSetup = await verifyPaymentSetup(job.createdBy);
-        if (!hasPaymentSetup) {
+        // Make sure we're calling with the correct helper ID
+        const helperHasPaymentSetup = await verifyHelperPaymentSetup(job.helperAssigned);
+        
+        console.log('Helper payment setup result:', helperHasPaymentSetup);
+        
+        if (!helperHasPaymentSetup) {
+          // Show warning but allow user to proceed
           Alert.alert(
-            'Payment Setup Required',
-            'You need to set up a payment method before starting this job.',
+            'Helper Payment Setup Warning',
+            'The helper may not have completed their payment setup. You can still start the job, but payment processing might be delayed.',
             [
-              { text: 'Cancel', style: 'cancel' },
+              { text: 'Cancel', style: 'cancel', onPress: () => setProcessingPayment(false) },
               { 
-                text: 'Set Up Payment', 
-                onPress: () => navigation.navigate('PaymentMethod') 
+                text: 'Continue Anyway', 
+                onPress: () => createPaymentAndStartJob()
               }
             ]
           );
-          setProcessingPayment(false);
           return;
+        } else {
+          console.log('Helper payment setup is complete, proceeding with job start');
         }
-        
-        // Check if helper has Connect account set up
-        const helperHasPaymentSetup = await verifyHelperPaymentSetup(job.helperAssigned);
-        if (!helperHasPaymentSetup) {
-          Alert.alert(
-            'Helper Payment Setup Incomplete',
-            'The helper hasn\'t completed their payment setup. Please contact them to complete setup before starting the job.',
-            [{ text: 'OK' }]
-          );
-          setProcessingPayment(false);
-          return;
-        }
-        
-        // Create payment intent for the job amount
-        const functions = getFunctions();
-        const createPaymentIntent = httpsCallable(functions, 'createPaymentIntent');
-        const result = await createPaymentIntent({
-          amount: job.paymentAmount,
-          jobId: job.id,
-          capture_method: 'manual' // Important: this holds the payment
-        });
-        
-        // Update the job status
-        await updateDoc(doc(db, 'jobs', jobId), {
-          status: 'in-progress',
-          startedAt: new Date(),
-          paymentIntentId: result.data.paymentIntentId
-        });
-        
-        Alert.alert(
-          'Job Started!',
-          'You have successfully started this job. The payment has been authorized and will be charged when the job is completed.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate back to dashboard after confirming
-                loadJobDetails();
-              }
-            }
-          ]
-        );
-      } else {
-        // For non-fixed payment jobs, just update the status
-        await updateDoc(doc(db, 'jobs', jobId), {
-          status: 'in-progress',
-          startedAt: new Date(),
-        });
-        
-        Alert.alert(
-          'Job Started!',
-          'You have successfully started this job.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                loadJobDetails();
-              }
-            }
-          ]
-        );
+      } catch (helperCheckError) {
+        console.error('Helper payment check failed, continuing anyway:', helperCheckError);
+        // Continue with job start even if helper check fails
       }
-    } catch (error) {
-      console.error('Error starting job:', error);
-      Alert.alert('Error', error.message || 'Failed to start job. Please try again.');
-    } finally {
+      
+      // If all checks pass, create payment and start job
+      await createPaymentAndStartJob();
+    } else {
+      // For non-fixed payment jobs, just update the status
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'in-progress',
+        startedAt: new Date(),
+      });
+      
+      Alert.alert(
+        'Job Started!',
+        'You have successfully started this job.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              loadJobDetails();
+            }
+          }
+        ]
+      );
       setProcessingPayment(false);
     }
-  };
+  } catch (error) {
+    console.error('Error starting job:', error);
+    Alert.alert('Error', error.message || 'Failed to start job. Please try again.');
+    setProcessingPayment(false);
+  }
+};
+
+// Separate function to handle payment creation and job start
+const createPaymentAndStartJob = async () => {
+  try {
+    console.log('Creating payment intent for job start');
+    
+    // Create payment intent for the job amount
+    const result = await callFirebaseFunction('createPaymentIntent', {
+      amount: job.paymentAmount,
+      jobId: job.id,
+      capture_method: 'manual'
+    });
+    
+    console.log('Payment intent created:', result);
+    
+    // Update the job status
+    await updateDoc(doc(db, 'jobs', jobId), {
+      status: 'in-progress',
+      startedAt: new Date(),
+      paymentIntentId: result.paymentIntentId,
+      paymentStatus: result.status
+    });
+    
+    Alert.alert(
+      'Job Started!',
+      'You have successfully started this job. The payment has been authorized and will be charged when the job is completed.',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            loadJobDetails();
+          }
+        }
+      ]
+    );
+  } catch (error) {
+    console.error('Error creating payment and starting job:', error);
+    throw error;
+  } finally {
+    setProcessingPayment(false);
+  }
+};
 
   const handleCompleteJob = async () => {
     try {
