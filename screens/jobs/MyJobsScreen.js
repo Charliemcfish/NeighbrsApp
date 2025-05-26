@@ -40,81 +40,84 @@ const MyJobsScreen = ({ navigation }) => {
     loadJobs();
   }, [filter]);
 
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const user = auth.currentUser;
-      
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
+// In screens/jobs/MyJobsScreen.js - Update the loadJobs function
 
-      let statusFilter = [];
-      if (filter === 'open') {
-        statusFilter = ['open'];
-      } else if (filter === 'in-progress') {
-        statusFilter = ['accepted', 'in-progress'];
-      } else if (filter === 'completed') {
-        statusFilter = ['completed', 'cancelled'];
-      }
-
-      const jobsQuery = query(
-        collection(db, 'jobs'),
-        where('createdBy', '==', user.uid),
-        where('status', 'in', statusFilter),
-        orderBy('createdAt', 'desc')
-      );
-
-      const querySnapshot = await getDocs(jobsQuery);
-      const jobsList = [];
-      
-      // Get all jobs
-      for (const doc of querySnapshot.docs) {
-        jobsList.push({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt.toDate(),
-        });
-      }
-
-      // For each job, get helper data if assigned
-      const enhancedJobsList = await Promise.all(
-        jobsList.map(async (job) => {
-          // Add helper info if assigned
-          let helperData = null;
-          if (job.helperAssigned) {
-            try {
-              const helperDoc = await getDoc(doc(db, 'users', job.helperAssigned));
-              if (helperDoc.exists()) {
-                helperData = helperDoc.data();
-              }
-            } catch (error) {
-              console.error('Error getting helper info:', error);
-            }
-          }
-          
-          // Calculate distance if job has coordinates and user has location
-          let distance = null;
-          if (userLocation && job.locationCoordinates) {
-            distance = calculateDistance(userLocation, job.locationCoordinates);
-          }
-          
-          return {
-            ...job,
-            helperName: helperData?.fullName,
-            helperImage: helperData?.profileImage,
-            distance: distance
-          };
-        })
-      );
-
-      setJobs(enhancedJobsList);
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    } finally {
-      setLoading(false);
+const loadJobs = async () => {
+  setLoading(true);
+  try {
+    const user = auth.currentUser;
+    
+    if (!user) {
+      throw new Error('User not authenticated');
     }
-  };
+
+    let statusFilter = [];
+    if (filter === 'open') {
+      statusFilter = ['open'];
+    } else if (filter === 'in-progress') {
+      // Include completion-requested in the in-progress filter so neighbors can see and complete jobs
+      statusFilter = ['accepted', 'in-progress', 'completion-requested'];
+    } else if (filter === 'completed') {
+      statusFilter = ['completed', 'cancelled'];
+    }
+
+    const jobsQuery = query(
+      collection(db, 'jobs'),
+      where('createdBy', '==', user.uid),
+      where('status', 'in', statusFilter),
+      orderBy('createdAt', 'desc')
+    );
+
+    const querySnapshot = await getDocs(jobsQuery);
+    const jobsList = [];
+    
+    // Get all jobs
+    for (const doc of querySnapshot.docs) {
+      jobsList.push({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+      });
+    }
+
+    // Rest of the function remains the same...
+    const enhancedJobsList = await Promise.all(
+      jobsList.map(async (job) => {
+        // Add helper info if assigned
+        let helperData = null;
+        if (job.helperAssigned) {
+          try {
+            const helperDoc = await getDoc(doc(db, 'users', job.helperAssigned));
+            if (helperDoc.exists()) {
+              helperData = helperDoc.data();
+            }
+          } catch (error) {
+            console.error('Error getting helper info:', error);
+          }
+        }
+        
+        // Calculate distance if job has coordinates and user has location
+        let distance = null;
+        if (userLocation && job.locationCoordinates) {
+          distance = calculateDistance(userLocation, job.locationCoordinates);
+        }
+        
+        return {
+          ...job,
+          helperName: helperData?.fullName,
+          helperImage: helperData?.profileImage,
+          distance: distance
+        };
+      })
+    );
+
+    setJobs(enhancedJobsList);
+  } catch (error) {
+    console.error('Error loading jobs:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const renderJobItem = ({ item }) => (
     <TouchableOpacity 
@@ -124,9 +127,10 @@ const MyJobsScreen = ({ navigation }) => {
       <View style={styles.jobHeader}>
         <View style={styles.titleContainer}>
           <Text style={styles.jobTitle}>{item.title}</Text>
-          <Text style={[styles.statusBadge, styles[`status${item.status}`]]}>
-            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-          </Text>
+          <Text style={[styles.statusBadge, styles[`status${item.status.replace('-', '')}`]]}>
+  {item.status === 'completion-requested' ? 'Completion Requested' : 
+   item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+</Text>
         </View>
       </View>
       
@@ -525,6 +529,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.medium,
   },
+  'statuscompletion-requested': {
+  backgroundColor: '#e8f5e9',
+  color: '#4caf50',
+},
 });
 
 export default MyJobsScreen;

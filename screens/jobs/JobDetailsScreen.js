@@ -491,74 +491,250 @@ const createPaymentAndStartJob = async () => {
 };
 
   const handleCompleteJob = async () => {
-    try {
-      if (job.paymentType === 'fixed' && job.paymentIntentId) {
-        // For fixed payment jobs with a payment intent, prompt confirmation
-        Alert.alert(
-          'Complete Job and Process Payment',
-          `Are you sure you want to mark this job as complete and pay ${job.paymentAmount.toFixed(2)} ${job.paymentAmount === 1 ? 'pound' : 'pounds'} to the helper?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Complete and Pay',
-              onPress: async () => {
-                setProcessingPayment(true);
-                try {
-                  // Capture the payment
-                  const functions = getFunctions();
-                  const capturePayment = httpsCallable(functions, 'capturePayment');
-                  await capturePayment({
-                    paymentIntentId: job.paymentIntentId,
-                    jobId: job.id
-                  });
-                  
-                  // Update job status
-                  await updateDoc(doc(db, 'jobs', jobId), {
-                    status: 'completed',
-                    completedAt: new Date(),
-                    paymentStatus: 'captured'
-                  });
-                  
-                  // Determine who should be reviewed
-                  const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
-                  setIsReviewingHelper(shouldReviewHelper);
-                  setReviewModalVisible(true);
-                  
-                  // Refresh job details
-                  loadJobDetails();
-                } catch (error) {
-                  console.error('Error capturing payment:', error);
-                  Alert.alert('Payment Error', error.message || 'Failed to process payment. Please try again.');
-                } finally {
-                  setProcessingPayment(false);
-                }
+  try {
+    const user = auth.currentUser;
+    const isCreator = user.uid === job.createdBy;
+    const isHelper = job.helperAssigned === user.uid;
+
+    if (isHelper) {
+      // Helper is requesting completion - send notification to job creator
+      await handleHelperRequestCompletion();
+    } else if (isCreator) {
+      // Job creator is completing the job and releasing payment
+      await handleJobCreatorComplete();
+    }
+  } catch (error) {
+    console.error('Error in job completion flow:', error);
+    Alert.alert('Error', error.message || 'Failed to process request. Please try again.');
+  }
+};
+
+// New function for when helper requests completion
+const handleHelperRequestCompletion = async () => {
+  try {
+    Alert.alert(
+      'Request Job Completion',
+      'This will notify the job creator that you have completed the work. They will then review and release payment.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Request Completion',
+          onPress: async () => {
+            setProcessingPayment(true);
+            
+            try {
+              // Update job status to indicate helper has requested completion
+              await updateDoc(doc(db, 'jobs', jobId), {
+                status: 'completion-requested',
+                helperCompletedAt: new Date(),
+                helperRequestedCompletion: true
+              });
+
+              // Send a message to the job creator
+              await sendCompletionRequestMessage();
+
+              Alert.alert(
+                'Completion Requested',
+                'You have notified the job creator that the work is complete. They will review and release payment once confirmed.',
+                [{ text: 'OK', onPress: () => loadJobDetails() }]
+              );
+            } catch (error) {
+              console.error('Error requesting completion:', error);
+              Alert.alert('Error', 'Failed to request completion. Please try again.');
+            } finally {
+              setProcessingPayment(false);
+            }
+          }
+        }
+      ]
+    );
+  } catch (error) {
+    console.error('Error in helper request completion:', error);
+    throw error;
+  }
+};
+
+// New function for when job creator completes the job
+const handleJobCreatorComplete = async () => {
+  try {
+    if (job.paymentType === 'fixed' && job.paymentIntentId) {
+      // For fixed payment jobs with a payment intent, prompt confirmation
+      Alert.alert(
+        'Complete Job and Release Payment',
+        `Are you sure you want to mark this job as complete and pay $${job.paymentAmount.toFixed(2)} to the helper?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Complete and Pay',
+            onPress: async () => {
+              setProcessingPayment(true);
+              try {
+                // Capture the payment
+                const functions = getFunctions();
+                const capturePayment = httpsCallable(functions, 'capturePayment');
+                await capturePayment({
+                  paymentIntentId: job.paymentIntentId,
+                  jobId: job.id
+                });
+                
+                // Update job status
+                await updateDoc(doc(db, 'jobs', jobId), {
+                  status: 'completed',
+                  completedAt: new Date(),
+                  paymentStatus: 'captured',
+                  completedBy: 'creator'
+                });
+                
+                // Send completion confirmation message
+                await sendCompletionConfirmationMessage();
+                
+                // Determine who should be reviewed
+                const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+                setIsReviewingHelper(shouldReviewHelper);
+                setReviewModalVisible(true);
+                
+                // Refresh job details
+                loadJobDetails();
+              } catch (error) {
+                console.error('Error capturing payment:', error);
+                Alert.alert('Payment Error', error.message || 'Failed to process payment. Please try again.');
+              } finally {
+                setProcessingPayment(false);
               }
             }
-          ]
-        );
-      } else if (job.paymentType === 'tip') {
-        // For tip-only jobs, show tip modal first
-        setShowTipModal(true);
-      } else {
-        // For free jobs, just mark as complete
-        await updateDoc(doc(db, 'jobs', jobId), {
-          status: 'completed',
-          completedAt: new Date(),
-        });
+          }
+        ]
+      );
+    } else if (job.paymentType === 'tip') {
+      // For tip-only jobs, show tip modal first
+      setShowTipModal(true);
+    } else {
+      // For free jobs, just mark as complete
+      await updateDoc(doc(db, 'jobs', jobId), {
+        status: 'completed',
+        completedAt: new Date(),
+        completedBy: 'creator'
+      });
 
-        // Determine who should be reviewed
-        const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
-        setIsReviewingHelper(shouldReviewHelper);
-        setReviewModalVisible(true);
-        
-        // Refresh job details
-        loadJobDetails();
-      }
-    } catch (error) {
-      console.error('Error completing job:', error);
-      Alert.alert('Error', error.message || 'Failed to complete job. Please try again.');
+      // Send completion confirmation message
+      await sendCompletionConfirmationMessage();
+
+      // Determine who should be reviewed
+      const shouldReviewHelper = auth.currentUser.uid === job.createdBy;
+      setIsReviewingHelper(shouldReviewHelper);
+      setReviewModalVisible(true);
+      
+      // Refresh job details
+      loadJobDetails();
     }
-  };
+  } catch (error) {
+    console.error('Error in job creator complete:', error);
+    throw error;
+  }
+};
+
+// Helper function to send completion request message
+const sendCompletionRequestMessage = async () => {
+  try {
+    // Find or create chat between helper and job creator
+    const user = auth.currentUser;
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+    
+    const querySnapshot = await getDocs(chatsQuery);
+    let existingChatId = null;
+    
+    querySnapshot.forEach((doc) => {
+      const chatData = doc.data();
+      if (chatData.participants.includes(job.createdBy)) {
+        existingChatId = doc.id;
+      }
+    });
+    
+    let chatId = existingChatId;
+    
+    if (!chatId) {
+      // Create new chat if none exists
+      const newChatData = {
+        participants: [user.uid, job.createdBy],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        jobId: job.id,
+        lastMessage: `Job "${job.title}" has been completed and is ready for review.`,
+        unreadBy: [job.createdBy]
+      };
+      
+      const newChatRef = await addDoc(collection(db, 'chats'), newChatData);
+      chatId = newChatRef.id;
+    }
+    
+    // Send completion request message
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      text: `🎉 Job Complete! I have finished the work for "${job.title}". Please review and confirm completion to release payment.`,
+      senderId: user.uid,
+      createdAt: new Date(),
+      isCompletionRequest: true,
+      jobId: job.id
+    });
+    
+    // Update chat with latest message
+    await updateDoc(doc(db, 'chats', chatId), {
+      lastMessage: `Job "${job.title}" has been completed and is ready for review.`,
+      updatedAt: new Date(),
+      unreadBy: [job.createdBy]
+    });
+    
+  } catch (error) {
+    console.error('Error sending completion request message:', error);
+    // Don't throw error - completion request should still work even if message fails
+  }
+};
+
+// Helper function to send completion confirmation message
+const sendCompletionConfirmationMessage = async () => {
+  try {
+    // Find existing chat
+    const user = auth.currentUser;
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+    
+    const querySnapshot = await getDocs(chatsQuery);
+    let existingChatId = null;
+    
+    querySnapshot.forEach((doc) => {
+      const chatData = doc.data();
+      if (chatData.participants.includes(job.helperAssigned)) {
+        existingChatId = doc.id;
+      }
+    });
+    
+    if (existingChatId) {
+      // Send completion confirmation message
+      await addDoc(collection(db, 'chats', existingChatId, 'messages'), {
+        text: `✅ Job Confirmed Complete! Thank you for your excellent work on "${job.title}". Payment has been released.`,
+        senderId: user.uid,
+        createdAt: new Date(),
+        isCompletionConfirmation: true,
+        jobId: job.id
+      });
+      
+      // Update chat with latest message
+      await updateDoc(doc(db, 'chats', existingChatId), {
+        lastMessage: `Job "${job.title}" has been confirmed complete and payment released.`,
+        updatedAt: new Date(),
+        unreadBy: [job.helperAssigned]
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error sending completion confirmation message:', error);
+    // Don't throw error - job completion should still work even if message fails
+  }
+};
 
   const handleSubmitTip = async () => {
     if (!tipAmount || isNaN(parseFloat(tipAmount)) || parseFloat(tipAmount) <= 0) {
@@ -882,9 +1058,10 @@ const createPaymentAndStartJob = async () => {
         <View style={styles.jobHeader}>
           <Text style={styles.jobTitle}>{job.title}</Text>
           <View style={styles.statusContainer}>
-            <Text style={[styles.statusBadge, styles[`status${job.status}`]]}>
-              {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-            </Text>
+            <Text style={[styles.statusBadge, styles[`status${job.status.replace('-', '')}`]]}>
+  {job.status === 'completion-requested' ? 'Completion Requested' : 
+   job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+</Text>
           </View>
         </View>
         
@@ -1160,69 +1337,108 @@ const createPaymentAndStartJob = async () => {
           </View>
         )}
         
-        {/* Action buttons based on job status and user role */}
-        <View style={styles.actionButtonsContainer}>
-          {job.status === 'accepted' && (isCreator || isHelper) && (
-            <Button 
-              title="Start Job"
-              onPress={handleStartJob}
-              style={styles.actionButton}
-              size="large"
-            />
-          )}
-          
-          {job.status === 'in-progress' && (isCreator || isHelper) && (
-            <Button 
-              title="Mark as Completed"
-              onPress={handleCompleteJob}
-              style={styles.actionButton}
-              size="large"
-            />
-          )}
-          
-          {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress') && isCreator && (
-            <Button 
-              title="Cancel Job"
-              onPress={handleCancelJob}
-              type="secondary"
-              style={styles.cancelButton}
-              size="large"
-            />
-          )}
-          
-          {/* Chat button for accepted/in-progress jobs */}
-          {(job.status === 'accepted' || job.status === 'in-progress') && (isCreator || isHelper) && (
-            <Button 
-              title="Chat"
-              icon="chatbubble-ellipses"
-              onPress={() => handleOpenChat(isCreator ? job.helperAssigned : job.createdBy)}
-              style={styles.chatActionButton}
-              size="large"
-            />
-          )}
-          
-          {/* Chat button for helpers who made an offer */}
-          {!isCreator && job.status === 'open' && hasOffered && (
-            <Button 
-              title="Chat with Job Poster"
-              icon="chatbubble-ellipses"
-              onPress={() => handleOpenChat(job.createdBy)}
-              style={styles.chatActionButton}
-              size="large"
-            />
-          )}
-          
-          {/* Button to give feedback for completed jobs */}
-          {job.status === 'completed' && showFeedbackButton && (
-            <Button 
-              title={`Rate ${isReviewingHelper ? 'Helper' : 'Neighbor'}`}
-              icon="star"
-              onPress={() => setReviewModalVisible(true)}
-              style={styles.feedbackButton}
-              size="large"
-            />
-          )}
-        </View>
+       // In screens/jobs/JobDetailsScreen.js - Replace the action buttons section in the JSX
+
+{/* Action buttons based on job status and user role */}
+<View style={styles.actionButtonsContainer}>
+  {job.status === 'accepted' && (isCreator || isHelper) && (
+    <Button 
+      title="Start Job"
+      onPress={handleStartJob}
+      style={styles.actionButton}
+      size="large"
+    />
+  )}
+  
+  {/* Helper can request completion when job is in progress */}
+  {job.status === 'in-progress' && isHelper && (
+    <Button 
+      title="Request Job Completion"
+      onPress={handleCompleteJob}
+      style={styles.actionButton}
+      size="large"
+      icon="checkmark-circle-outline"
+    />
+  )}
+  
+  {/* Show status message when helper has requested completion */}
+  {job.status === 'completion-requested' && isCreator && (
+    <View style={styles.completionRequestedContainer}>
+      <Text style={styles.completionRequestedText}>
+        🎉 The helper has completed the work and is requesting job completion.
+      </Text>
+      <Button 
+        title="Review and Complete Job"
+        onPress={handleCompleteJob}
+        style={styles.actionButton}
+        size="large"
+        icon="checkmark-done"
+      />
+    </View>
+  )}
+  
+  {/* Show waiting message for helper when completion is requested */}
+  {job.status === 'completion-requested' && isHelper && (
+    <View style={styles.waitingForApprovalContainer}>
+      <Text style={styles.waitingForApprovalText}>
+        ⏳ Waiting for job creator to review and confirm completion.
+      </Text>
+    </View>
+  )}
+  
+  {/* Job creator can still complete directly if helper hasn't requested completion yet */}
+  {job.status === 'in-progress' && isCreator && (
+    <Button 
+      title="Mark as Completed"
+      onPress={handleCompleteJob}
+      style={styles.actionButton}
+      size="large"
+    />
+  )}
+  
+  {(job.status === 'open' || job.status === 'accepted' || job.status === 'in-progress' || job.status === 'completion-requested') && isCreator && (
+    <Button 
+      title="Cancel Job"
+      onPress={handleCancelJob}
+      type="secondary"
+      style={styles.cancelButton}
+      size="large"
+    />
+  )}
+  
+  {/* Chat button for accepted/in-progress jobs */}
+  {(job.status === 'accepted' || job.status === 'in-progress' || job.status === 'completion-requested') && (isCreator || isHelper) && (
+    <Button 
+      title="Chat"
+      icon="chatbubble-ellipses"
+      onPress={() => handleOpenChat(isCreator ? job.helperAssigned : job.createdBy)}
+      style={styles.chatActionButton}
+      size="large"
+    />
+  )}
+  
+  {/* Chat button for helpers who made an offer */}
+  {!isCreator && job.status === 'open' && hasOffered && (
+    <Button 
+      title="Chat with Job Poster"
+      icon="chatbubble-ellipses"
+      onPress={() => handleOpenChat(job.createdBy)}
+      style={styles.chatActionButton}
+      size="large"
+    />
+  )}
+  
+  {/* Button to give feedback for completed jobs */}
+  {job.status === 'completed' && showFeedbackButton && (
+    <Button 
+      title={`Rate ${isReviewingHelper ? 'Helper' : 'Neighbor'}`}
+      icon="star"
+      onPress={() => setReviewModalVisible(true)}
+      style={styles.feedbackButton}
+      size="large"
+    />
+  )}
+</View>
       </View>
       
       {/* Tip Modal */}
@@ -1838,6 +2054,46 @@ const styles = StyleSheet.create({
   sendTipButton: {
     flex: 1,
   },
+
+  completionRequestedContainer: {
+  backgroundColor: '#e8f5e9',
+  borderRadius: 15,
+  padding: 20,
+  marginBottom: 15,
+  borderWidth: 1,
+  borderColor: COLORS.success,
+  alignItems: 'center',
+},
+completionRequestedText: {
+  ...FONTS.body,
+  fontSize: 16,
+  color: COLORS.success,
+  textAlign: 'center',
+  marginBottom: 15,
+  fontWeight: 'bold',
+},
+waitingForApprovalContainer: {
+  backgroundColor: '#fff8e1',
+  borderRadius: 15,
+  padding: 20,
+  marginBottom: 15,
+  borderWidth: 1,
+  borderColor: COLORS.warning,
+  alignItems: 'center',
+},
+waitingForApprovalText: {
+  ...FONTS.body,
+  fontSize: 16,
+  color: COLORS.warning,
+  textAlign: 'center',
+  fontWeight: 'bold',
+},
+
+'statuscompletion-requested': {
+  backgroundColor: '#e8f5e9',
+  color: '#4caf50',
+},
+
 });
 
 export default JobDetailsScreen;

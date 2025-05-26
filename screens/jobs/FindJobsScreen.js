@@ -99,103 +99,105 @@ const FindJobsScreen = ({ navigation, route }) => {
     loadJobs();
   }, [activeTab]);
 
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const user = auth.currentUser;
-      let jobsQuery;
-      
-      if (activeTab === 'available') {
-        // Available jobs (open jobs that the helper hasn't been assigned to)
-        jobsQuery = query(
-          collection(db, 'jobs'),
-          where('status', '==', 'open'),
-          orderBy('createdAt', 'desc')
-        );
-      } else if (activeTab === 'current') {
-        // Current jobs (jobs where this helper is assigned and status is accepted or in-progress)
-        jobsQuery = query(
-          collection(db, 'jobs'),
-          where('helperAssigned', '==', user.uid),
-          where('status', 'in', ['accepted', 'in-progress']),
-          orderBy('createdAt', 'desc')
-        );
-      } else if (activeTab === 'completed') {
-        // Completed jobs (jobs where this helper is assigned and status is completed or cancelled)
-        jobsQuery = query(
-          collection(db, 'jobs'),
-          where('helperAssigned', '==', user.uid),
-          where('status', 'in', ['completed', 'cancelled']),
-          orderBy('createdAt', 'desc')
-        );
-      }
+  // In screens/jobs/FindJobsScreen.js - Update the loadJobs function
 
-      const querySnapshot = await getDocs(jobsQuery);
-      const jobsList = [];
+const loadJobs = async () => {
+  setLoading(true);
+  try {
+    const user = auth.currentUser;
+    let jobsQuery;
+    
+    if (activeTab === 'available') {
+      // Available jobs (open jobs that the helper hasn't been assigned to)
+      jobsQuery = query(
+        collection(db, 'jobs'),
+        where('status', '==', 'open'),
+        orderBy('createdAt', 'desc')
+      );
+    } else if (activeTab === 'current') {
+      // Current jobs (jobs where this helper is assigned and status is accepted, in-progress, or completion-requested)
+      jobsQuery = query(
+        collection(db, 'jobs'),
+        where('helperAssigned', '==', user.uid),
+        where('status', 'in', ['accepted', 'in-progress', 'completion-requested']),
+        orderBy('createdAt', 'desc')
+      );
+    } else if (activeTab === 'completed') {
+      // Completed jobs (jobs where this helper is assigned and status is completed or cancelled)
+      jobsQuery = query(
+        collection(db, 'jobs'),
+        where('helperAssigned', '==', user.uid),
+        where('status', 'in', ['completed', 'cancelled']),
+        orderBy('createdAt', 'desc')
+      );
+    }
+
+    const querySnapshot = await getDocs(jobsQuery);
+    const jobsList = [];
+    
+    querySnapshot.forEach((doc) => {
+      const jobData = doc.data();
       
-      querySnapshot.forEach((doc) => {
-        const jobData = doc.data();
-        
-        // Only add appropriate jobs to each tab
-        if (activeTab === 'available') {
-          // Skip jobs where the current user is already the assigned helper
-          if (jobData.helperAssigned !== user.uid) {
-            jobsList.push({
-              id: doc.id,
-              ...jobData,
-              createdAt: jobData.createdAt.toDate(),
-            });
-          }
-        } else {
-          // For current and completed tabs, add all jobs from the query
-          // (they're already filtered by the query conditions)
+      // Only add appropriate jobs to each tab
+      if (activeTab === 'available') {
+        // Skip jobs where the current user is already the assigned helper
+        if (jobData.helperAssigned !== user.uid) {
           jobsList.push({
             id: doc.id,
             ...jobData,
             createdAt: jobData.createdAt.toDate(),
           });
         }
-      });
+      } else {
+        // For current and completed tabs, add all jobs from the query
+        // (they're already filtered by the query conditions)
+        jobsList.push({
+          id: doc.id,
+          ...jobData,
+          createdAt: jobData.createdAt.toDate(),
+        });
+      }
+    });
 
-      // Add user information for each job and calculate distances
-      const enhancedJobsList = await Promise.all(
-        jobsList.map(async (job) => {
-          try {
-            const creatorDoc = await getDoc(doc(db, 'users', job.createdBy));
-            let distance = null;
-            
-            // Calculate distance if both user and job have location coordinates
-            if (userLocation && job.locationCoordinates) {
-              distance = calculateDistance(userLocation, job.locationCoordinates);
-            }
-            
-            if (creatorDoc.exists()) {
-              const creatorData = creatorDoc.data();
-              return {
-                ...job,
-                creatorName: creatorData.fullName || 'Unknown User',
-                creatorImage: creatorData.profileImage || null,
-                distance: distance
-              };
-            }
+    // Rest of the function remains the same...
+    const enhancedJobsList = await Promise.all(
+      jobsList.map(async (job) => {
+        try {
+          const creatorDoc = await getDoc(doc(db, 'users', job.createdBy));
+          let distance = null;
+          
+          // Calculate distance if both user and job have location coordinates
+          if (userLocation && job.locationCoordinates) {
+            distance = calculateDistance(userLocation, job.locationCoordinates);
+          }
+          
+          if (creatorDoc.exists()) {
+            const creatorData = creatorDoc.data();
             return {
               ...job,
+              creatorName: creatorData.fullName || 'Unknown User',
+              creatorImage: creatorData.profileImage || null,
               distance: distance
             };
-          } catch (error) {
-            console.error('Error getting job creator info:', error);
-            return job;
           }
-        })
-      );
+          return {
+            ...job,
+            distance: distance
+          };
+        } catch (error) {
+          console.error('Error getting job creator info:', error);
+          return job;
+        }
+      })
+    );
 
-      setJobs(enhancedJobsList);
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setJobs(enhancedJobsList);
+  } catch (error) {
+    console.error('Error loading jobs:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const toggleJobTypeFilter = (jobType) => {
     setSelectedJobTypes(prev => {
@@ -331,9 +333,10 @@ const FindJobsScreen = ({ navigation, route }) => {
       
       {activeTab !== 'available' && (
         <View style={styles.statusContainer}>
-          <Text style={[styles.statusBadge, styles[`status${item.status}`]]}>
-            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-          </Text>
+          <Text style={[styles.statusBadge, styles[`status${item.status.replace('-', '')}`]]}>
+  {item.status === 'completion-requested' ? 'Completion Requested' : 
+   item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -969,6 +972,10 @@ const styles = StyleSheet.create({
   modalButton: {
     flex: 0.48,
   },
+  'statuscompletion-requested': {
+  backgroundColor: '#e8f5e9',
+  color: '#4caf50',
+},
 });
 
 export default FindJobsScreen;
