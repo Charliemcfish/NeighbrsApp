@@ -1,4 +1,3 @@
-// screens/jobs/FindJobsScreen.js
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -60,13 +59,39 @@ const FindJobsScreen = ({ navigation, route }) => {
     return 'available';
   });
   
-  // Watch for changes to initialTabName (in case user navigates to this screen multiple times)
+  // Watch for changes to initialTabName and reset jobs state when tab changes
   useEffect(() => {
     if (initialTabName && ['available', 'current', 'completed'].includes(initialTabName)) {
       console.log('Updating tab to:', initialTabName);
-      setActiveTab(initialTabName);
+      console.log('Previous tab was:', activeTab);
+      
+      // Reset jobs and loading state when switching tabs
+      if (activeTab !== initialTabName) {
+        setJobs([]);
+        setLoading(true);
+        setActiveTab(initialTabName);
+      }
     }
   }, [initialTabName, route.params]);
+
+  // Reset search and filters when tab changes
+  useEffect(() => {
+    console.log('Active tab changed to:', activeTab);
+    // Reset search and filters when switching tabs
+    setSearchQuery('');
+    setFiltersApplied(false);
+    setSelectedJobTypes([...userJobTypes]);
+    setMinPaymentAmount('');
+    setMaxDistance('');
+    setPaymentTypeFilter({
+      fixed: true,
+      tip: true,
+      free: true
+    });
+    
+    // Load jobs for the new tab
+    loadJobs();
+  }, [activeTab]);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -96,108 +121,110 @@ const FindJobsScreen = ({ navigation, route }) => {
     };
 
     loadUserData();
-    loadJobs();
-  }, [activeTab]);
+  }, []); // Only run once on component mount
 
-  // In screens/jobs/FindJobsScreen.js - Update the loadJobs function
-
-const loadJobs = async () => {
-  setLoading(true);
-  try {
-    const user = auth.currentUser;
-    let jobsQuery;
+  const loadJobs = async () => {
+    console.log('Loading jobs for tab:', activeTab);
+    setLoading(true);
     
-    if (activeTab === 'available') {
-      // Available jobs (open jobs that the helper hasn't been assigned to)
-      jobsQuery = query(
-        collection(db, 'jobs'),
-        where('status', '==', 'open'),
-        orderBy('createdAt', 'desc')
-      );
-    } else if (activeTab === 'current') {
-      // Current jobs (jobs where this helper is assigned and status is accepted, in-progress, or completion-requested)
-      jobsQuery = query(
-        collection(db, 'jobs'),
-        where('helperAssigned', '==', user.uid),
-        where('status', 'in', ['accepted', 'in-progress', 'completion-requested']),
-        orderBy('createdAt', 'desc')
-      );
-    } else if (activeTab === 'completed') {
-      // Completed jobs (jobs where this helper is assigned and status is completed or cancelled)
-      jobsQuery = query(
-        collection(db, 'jobs'),
-        where('helperAssigned', '==', user.uid),
-        where('status', 'in', ['completed', 'cancelled']),
-        orderBy('createdAt', 'desc')
-      );
-    }
-
-    const querySnapshot = await getDocs(jobsQuery);
-    const jobsList = [];
-    
-    querySnapshot.forEach((doc) => {
-      const jobData = doc.data();
+    try {
+      const user = auth.currentUser;
+      let jobsQuery;
       
-      // Only add appropriate jobs to each tab
       if (activeTab === 'available') {
-        // Skip jobs where the current user is already the assigned helper
-        if (jobData.helperAssigned !== user.uid) {
+        // Available jobs (open jobs that the helper hasn't been assigned to)
+        jobsQuery = query(
+          collection(db, 'jobs'),
+          where('status', '==', 'open'),
+          orderBy('createdAt', 'desc')
+        );
+      } else if (activeTab === 'current') {
+        // Current jobs (jobs where this helper is assigned and status is accepted, in-progress, or completion-requested)
+        jobsQuery = query(
+          collection(db, 'jobs'),
+          where('helperAssigned', '==', user.uid),
+          where('status', 'in', ['accepted', 'in-progress', 'completion-requested']),
+          orderBy('createdAt', 'desc')
+        );
+      } else if (activeTab === 'completed') {
+        // Completed jobs (jobs where this helper is assigned and status is completed or cancelled)
+        jobsQuery = query(
+          collection(db, 'jobs'),
+          where('helperAssigned', '==', user.uid),
+          where('status', 'in', ['completed', 'cancelled']),
+          orderBy('createdAt', 'desc')
+        );
+      }
+
+      const querySnapshot = await getDocs(jobsQuery);
+      const jobsList = [];
+      
+      // Get all jobs
+      for (const doc of querySnapshot.docs) {
+        const jobData = doc.data();
+        
+        // Only add appropriate jobs to each tab
+        if (activeTab === 'available') {
+          // Skip jobs where the current user is already the assigned helper
+          if (jobData.helperAssigned !== user.uid) {
+            jobsList.push({
+              id: doc.id,
+              ...jobData,
+              createdAt: jobData.createdAt.toDate(),
+            });
+          }
+        } else {
+          // For current and completed tabs, add all jobs from the query
+          // (they're already filtered by the query conditions)
           jobsList.push({
             id: doc.id,
             ...jobData,
             createdAt: jobData.createdAt.toDate(),
           });
         }
-      } else {
-        // For current and completed tabs, add all jobs from the query
-        // (they're already filtered by the query conditions)
-        jobsList.push({
-          id: doc.id,
-          ...jobData,
-          createdAt: jobData.createdAt.toDate(),
-        });
       }
-    });
 
-    // Rest of the function remains the same...
-    const enhancedJobsList = await Promise.all(
-      jobsList.map(async (job) => {
-        try {
-          const creatorDoc = await getDoc(doc(db, 'users', job.createdBy));
-          let distance = null;
-          
-          // Calculate distance if both user and job have location coordinates
-          if (userLocation && job.locationCoordinates) {
-            distance = calculateDistance(userLocation, job.locationCoordinates);
-          }
-          
-          if (creatorDoc.exists()) {
-            const creatorData = creatorDoc.data();
+      // Enhance jobs with creator/helper info
+      const enhancedJobsList = await Promise.all(
+        jobsList.map(async (job) => {
+          try {
+            const creatorDoc = await getDoc(doc(db, 'users', job.createdBy));
+            let distance = null;
+            
+            // Calculate distance if both user and job have location coordinates
+            if (userLocation && job.locationCoordinates) {
+              distance = calculateDistance(userLocation, job.locationCoordinates);
+            }
+            
+            if (creatorDoc.exists()) {
+              const creatorData = creatorDoc.data();
+              return {
+                ...job,
+                creatorName: creatorData.fullName || 'Unknown User',
+                creatorImage: creatorData.profileImage || null,
+                distance: distance
+              };
+            }
             return {
               ...job,
-              creatorName: creatorData.fullName || 'Unknown User',
-              creatorImage: creatorData.profileImage || null,
               distance: distance
             };
+          } catch (error) {
+            console.error('Error getting job creator info:', error);
+            return job;
           }
-          return {
-            ...job,
-            distance: distance
-          };
-        } catch (error) {
-          console.error('Error getting job creator info:', error);
-          return job;
-        }
-      })
-    );
+        })
+      );
 
-    setJobs(enhancedJobsList);
-  } catch (error) {
-    console.error('Error loading jobs:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+      console.log(`Loaded ${enhancedJobsList.length} jobs for ${activeTab} tab`);
+      setJobs(enhancedJobsList);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+      setJobs([]); // Set empty array on error
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleJobTypeFilter = (jobType) => {
     setSelectedJobTypes(prev => {
@@ -334,9 +361,9 @@ const loadJobs = async () => {
       {activeTab !== 'available' && (
         <View style={styles.statusContainer}>
           <Text style={[styles.statusBadge, styles[`status${item.status.replace('-', '')}`]]}>
-  {item.status === 'completion-requested' ? 'Completion Requested' : 
-   item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-</Text>
+            {item.status === 'completion-requested' ? 'Completion Requested' : 
+             item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+          </Text>
         </View>
       )}
     </TouchableOpacity>
@@ -348,7 +375,35 @@ const loadJobs = async () => {
         <Text style={styles.headerTitle}>Find Jobs</Text>
       </View>
       
-      {/* Tabs remain the same */}
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'available' && styles.activeTab]}
+          onPress={() => setActiveTab('available')}
+        >
+          <Text style={[styles.tabText, activeTab === 'available' && styles.activeTabText]}>
+            Available
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'current' && styles.activeTab]}
+          onPress={() => setActiveTab('current')}
+        >
+          <Text style={[styles.tabText, activeTab === 'current' && styles.activeTabText]}>
+            Current
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+          onPress={() => setActiveTab('completed')}
+        >
+          <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
+            Completed
+          </Text>
+        </TouchableOpacity>
+      </View>
       
       {/* Search box - only show for available jobs */}
       {activeTab === 'available' && (
@@ -422,7 +477,7 @@ const loadJobs = async () => {
         </>
       )}
 
-      {/* Filter Modal */}
+      {/* Filter Modal - Same as before */}
       <Modal
         visible={filterModalVisible}
         transparent={true}
@@ -558,7 +613,7 @@ const loadJobs = async () => {
                     style={styles.distancePresetButton}
                     onPress={() => setMaxDistance('50')}
                   >
-                    <Text style={styles.distancePresetText}>50 mi</Text>
+                    <Text style={styles.distancePresets}>50 mi</Text>
                   </TouchableOpacity>
                 </View>
               </View>
