@@ -1,4 +1,4 @@
-// screens/HelperSetupScreen.js - Updated to use Stripe Connect
+// screens/HelperSetupScreen.js - Fixed for Android
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Linking
+  Linking,
+  Platform,
+  AppState
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,11 +36,31 @@ const HelperSetupScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [stripeAccountLoading, setStripeAccountLoading] = useState(false);
   const [stripeAccountSetup, setStripeAccountSetup] = useState(false);
+  const [showCompletionCheck, setShowCompletionCheck] = useState(false);
+  const [appStateVisible, setAppStateVisible] = useState(AppState.currentState);
 
   useEffect(() => {
-    // Check if user already has a Stripe account when component loads
     checkExistingStripeAccount();
-  }, []);
+    
+    // Add app state listener for Android to detect when user returns from browser
+    const handleAppStateChange = (nextAppState) => {
+      if (appStateVisible.match(/inactive|background/) && nextAppState === 'active') {
+        // App has come to foreground, check if setup was completed
+        if (showCompletionCheck) {
+          setTimeout(() => {
+            checkStripeAccountStatusAfterReturn();
+          }, 1000); // Small delay to ensure any updates have been processed
+        }
+      }
+      setAppStateVisible(nextAppState);
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription?.remove();
+    };
+  }, [appStateVisible, showCompletionCheck]);
 
   const checkExistingStripeAccount = async () => {
     try {
@@ -49,7 +71,6 @@ const HelperSetupScreen = ({ route, navigation }) => {
         setStripeAccountSetup(true);
       }
     } catch (error) {
-      // If there's an error checking, just continue - they can set it up
       console.log('No existing Stripe account found or error checking:', error.message);
     }
   };
@@ -68,41 +89,63 @@ const HelperSetupScreen = ({ route, navigation }) => {
       
       console.log('Setting up Stripe Connect account...');
       
-      // Create the Connect account
       const result = await callFirebaseFunction('createConnectAccount');
       console.log('Connect account creation result:', result);
       
       if (result.accountLinkUrl) {
         console.log('Opening account link URL:', result.accountLinkUrl);
         
-        // Import Linking at the top of the file
-        const { Linking } = require('react-native');
+        // Set flag to check completion when user returns
+        setShowCompletionCheck(true);
         
-        // Open the Stripe onboarding URL in the device's browser
-        await Linking.openURL(result.accountLinkUrl);
+        // Open the Stripe onboarding URL
+        const supported = await Linking.canOpenURL(result.accountLinkUrl);
         
-        // Show instructions to the user
-        Alert.alert(
-          'Complete Payment Setup',
-          'You\'ve been redirected to complete your payment account setup. Please finish the process in your browser, then return to the app to continue.',
-          [
-            {
-              text: 'I completed the setup',
-              onPress: () => {
-                // Check if the account setup is actually complete
-                checkStripeAccountStatus();
-              }
-            },
-            {
-              text: 'I need to finish later',
-              style: 'cancel',
-              onPress: () => {
-                // User can continue setup later
-                console.log('User will complete Stripe setup later');
-              }
-            }
-          ]
-        );
+        if (supported) {
+          await Linking.openURL(result.accountLinkUrl);
+          
+          // For Android, show immediate guidance since Alert might not work well with browser redirects
+          if (Platform.OS === 'android') {
+            // Use setTimeout to ensure the browser has opened first
+            setTimeout(() => {
+              Alert.alert(
+                'Complete Payment Setup',
+                'You\'ve been redirected to complete your payment account setup. Please finish the process in your browser, then return to this app.\n\nWhen you return, tap "Check Setup Status" to verify completion.',
+                [
+                  { 
+                    text: 'OK',
+                    onPress: () => {
+                      // Additional check after user acknowledges
+                      setShowCompletionCheck(true);
+                    }
+                  }
+                ]
+              );
+            }, 500);
+          } else {
+            // iOS flow
+            Alert.alert(
+              'Complete Payment Setup',
+              'You\'ve been redirected to complete your payment account setup. Please finish the process in your browser, then return to the app to continue.',
+              [
+                {
+                  text: 'I completed the setup',
+                  onPress: () => checkStripeAccountStatus()
+                },
+                {
+                  text: 'I need to finish later',
+                  style: 'cancel',
+                  onPress: () => {
+                    console.log('User will complete Stripe setup later');
+                    setShowCompletionCheck(true);
+                  }
+                }
+              ]
+            );
+          }
+        } else {
+          Alert.alert('Error', 'Unable to open the setup link. Please try again.');
+        }
       } else {
         Alert.alert('Error', 'Failed to generate setup link. Please try again.');
       }
@@ -114,15 +157,52 @@ const HelperSetupScreen = ({ route, navigation }) => {
     }
   };
 
+  const checkStripeAccountStatusAfterReturn = async () => {
+    try {
+      console.log('Checking Stripe account status after return...');
+      
+      const result = await callFirebaseFunction('checkConnectAccountStatus');
+      console.log('Account status result after return:', result);
+      
+      if (result.hasAccount && result.accountStatus === 'complete') {
+        setStripeAccountSetup(true);
+        setShowCompletionCheck(false);
+        Alert.alert(
+          'Setup Complete!',
+          'Your payment account has been set up successfully. You can now receive payments for completed jobs.'
+        );
+      } else if (result.hasAccount && result.needsOnboarding) {
+        Alert.alert(
+          'Setup Incomplete',
+          'Your payment account setup is not complete yet. Please finish the setup process to receive payments.',
+          [
+            {
+              text: 'Continue Setup',
+              onPress: () => handleSetupStripeAccount()
+            },
+            {
+              text: 'Finish Later',
+              style: 'cancel'
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      logError('checkStripeAccountStatusAfterReturn', error);
+      console.log('Error checking account status after return:', error.message);
+    }
+  };
+
   const checkStripeAccountStatus = async () => {
     try {
-      console.log('Checking Stripe account status...');
+      console.log('Manually checking Stripe account status...');
       
       const result = await callFirebaseFunction('checkConnectAccountStatus');
       console.log('Account status result:', result);
       
       if (result.hasAccount && result.accountStatus === 'complete') {
         setStripeAccountSetup(true);
+        setShowCompletionCheck(false);
         Alert.alert(
           'Setup Complete!',
           'Your payment account has been set up successfully. You can now receive payments for completed jobs.'
@@ -187,7 +267,7 @@ const HelperSetupScreen = ({ route, navigation }) => {
         helpDescription,
         isHelper: true,
         helperSetupComplete: true,
-        stripeAccountSetupInitiated: true, // Track that they've started the setup process
+        stripeAccountSetupInitiated: true,
       });
   
       Alert.alert(
@@ -197,7 +277,6 @@ const HelperSetupScreen = ({ route, navigation }) => {
           {
             text: 'OK',
             onPress: () => {
-              // Refresh the main app state to reflect the change
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Home' }]
@@ -224,7 +303,7 @@ const HelperSetupScreen = ({ route, navigation }) => {
             <Ionicons name="arrow-back" size={24} color={COLORS.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Set Up Helper Profile</Text>
-          <View style={{ width: 40 }} /> {/* Empty view for spacing */}
+          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -305,14 +384,27 @@ const HelperSetupScreen = ({ route, navigation }) => {
                   <Text style={styles.setupCompleteText}>Payment account setup complete!</Text>
                 </View>
               ) : (
-                <Button
-                  title={stripeAccountLoading ? "Setting up..." : "Set Up Payment Account"}
-                  onPress={handleSetupStripeAccount}
-                  loading={stripeAccountLoading}
-                  disabled={stripeAccountLoading}
-                  style={styles.stripeButton}
-                  size="large"
-                />
+                <>
+                  <Button
+                    title={stripeAccountLoading ? "Setting up..." : "Set Up Payment Account"}
+                    onPress={handleSetupStripeAccount}
+                    loading={stripeAccountLoading}
+                    disabled={stripeAccountLoading}
+                    style={styles.stripeButton}
+                    size="large"
+                  />
+                  
+                  {/* Android-specific: Show manual check button */}
+                  {showCompletionCheck && Platform.OS === 'android' && (
+                    <Button
+                      title="Check Setup Status"
+                      onPress={checkStripeAccountStatus}
+                      type="secondary"
+                      style={[styles.stripeButton, { marginTop: 10 }]}
+                      size="medium"
+                    />
+                  )}
+                </>
               )}
             </View>
           </View>

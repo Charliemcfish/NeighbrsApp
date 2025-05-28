@@ -1,6 +1,6 @@
-// components/Button.js
+// components/Button.js - Fixed for Android
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { FONTS } from '../styles/theme';
 
 const Button = ({ 
@@ -24,6 +24,7 @@ const Button = ({
       ]}
       onPress={onPress}
       disabled={disabled || loading}
+      activeOpacity={0.8}
     >
       {loading ? (
         <ActivityIndicator color={type === 'primary' ? 'white' : '#008CFF'} />
@@ -49,39 +50,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    // Enhanced shadow for better visibility on Android
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   primaryButton: {
     backgroundColor: '#008CFF',
+    // Ensure white text is visible on Android
+    borderWidth: 0,
   },
   secondaryButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
+    backgroundColor: 'white', // Changed from transparent for better Android compatibility
+    borderWidth: 2,
     borderColor: '#008CFF',
   },
   smallButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
+    minHeight: 36, // Ensure minimum touch target
   },
   mediumButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
+    minHeight: 44, // Standard touch target
   },
   largeButton: {
     paddingVertical: 15,
     paddingHorizontal: 32,
+    minHeight: 50, // Larger touch target
   },
   buttonText: {
     fontFamily: 'Barlow-Medium',
     textAlign: 'center',
     fontWeight: '600',
+    // Ensure text is always visible
+    includeFontPadding: false, // Android-specific: prevents extra padding
   },
   primaryButtonText: {
-    color: 'white',
+    color: '#FFFFFF', // Explicit white color
   },
   secondaryButtonText: {
     color: '#008CFF',
@@ -98,6 +113,7 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#CCCCCC',
     borderColor: '#CCCCCC',
+    opacity: 0.6,
   },
 });
 
